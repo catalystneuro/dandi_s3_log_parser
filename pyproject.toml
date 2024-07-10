@@ -23,6 +23,7 @@ dependencies = [
     "pandas",
     "tqdm",
     "ipinfo",
+    "PyYAML",
 ]
 classifiers = [
     "Programming Language :: Python",
