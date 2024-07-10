@@ -2,7 +2,6 @@ import pathlib
 
 import pandas
 import py
-import pytest
 
 import dandi_s3_log_parser
 
