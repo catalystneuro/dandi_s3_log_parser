@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dandi_s3_log_parser"]
+
+[project]
+name = "dandi_s3_log_parser"
+version="0.0.1"
+authors = [
+  { name="Cody Baker", email="cody.baker@catalystneuro.com" },
+]
+description = "Parse S3 logs to more easily calculate usage metrics per asset."
+readme = "README.md"
+keywords = ["aws", "s3", "log", "download tracking"]
+license = {file = "license.txt"}
+requires-python = ">=3.12"
+dependencies = [
+    "pandas",
+    "tqdm",
+    "ipinfo",
+    "PyYAML",
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: BSD License",
+    "Intended Audience :: Developers",
+    "Operating System :: Unix",
+]
+
+[project.scripts]
+parse_s3_logs = "dandi_s3_log_parser._command_line_interface:main"
+
+
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.toml
+  |\.yml
+  |\.txt
+  |\.sh
+  |\.git
+  |\.ini
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+
+
+[tool.ruff]
+exclude = [
+  "*/__init__.py"
+]
+
+[tool.ruff.lint.isort]
+relative-imports-order = "closest-to-furthest"
+known-first-party = ["dandi_s3_log_parser"]

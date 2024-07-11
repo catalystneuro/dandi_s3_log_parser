@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  DevTests:
+    uses: ./.github/workflows/testing_dev.yml
+    secrets:
+      IPINFO_CREDENTIALS: ${{ secrets.IPINFO_CREDENTIALS }}
+      CODECOV_CREDENTIALS: ${{ secrets.CODECOV_CREDENTIALS }}
