@@ -34,7 +34,7 @@ classifiers = [
 ]
 
 [project.scripts]
-parse_s3_logs = "dandi_s3_log_parser.command_line_interface:main"
+parse_s3_logs = "dandi_s3_log_parser._command_line_interface:main"
 
 
 
