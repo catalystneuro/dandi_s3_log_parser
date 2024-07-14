@@ -30,7 +30,7 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
     assert number_of_output_files != 0, f"Test expected_output folder ({test_parsed_s3_log_folder_path}) is empty!"
 
     # Increment this over time as more examples are added
-    expected_number_of_output_files = 1
+    expected_number_of_output_files = 2
     assert (
         number_of_output_files == expected_number_of_output_files
     ), f"The number of asset files ({number_of_output_files}) does not match expectation!"

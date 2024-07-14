@@ -40,12 +40,21 @@ jobs:
       - name: Display installed packages and their sources for debugging
         run: pip list
 
+      - name: Ensure caching is working
+        run: ls ~
+
       - name: Cache IP to region mapping to prevent overuse of ipinfo
         uses: actions/cache@v4
         id: dandi_home_cache
         with:
           path: ~/.dandi_s3_log_parser
           key: ubuntu_dandi_home_cache
+
+      - name: Ensure caching is working
+        run: |
+          ls ~
+          ls ~/.dandi_s3_log_parser
+          cat ~/.dandi_s3_log_parser/ip_to_region.json
 
       - name: Run pytest with coverage and printout coverage for debugging
         run: |
