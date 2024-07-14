@@ -300,22 +300,25 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    yearly_folder_paths = natsort.natsorted(seq=list(base_raw_s3_log_folder_path.iterdir()))
+    all_daily_raw_s3_log_file_paths = [str(path) for path in base_raw_s3_log_folder_path.rglob(pattern="*.log")]
+    print(natsort.natsorted(seq=all_daily_raw_s3_log_file_paths))
 
-    for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
-        monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
-
-        for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
-            daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.iterdir()))
-
-            for raw_s3_log_file_path in tqdm.tqdm(
-                iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
-            ):
-                parse_dandi_raw_s3_log(
-                    raw_s3_log_file_path=raw_s3_log_file_path,
-                    parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-                    mode=mode,
-                    excluded_ips=excluded_ips,
-                    exclude_github_ips=False,  # Already included in list so avoid repeated construction
-                    asset_id_handler=asset_id_handler,
-                )
+    # yearly_folder_paths = natsort.natsorted(seq=list(base_raw_s3_log_folder_path.iterdir()))
+    #
+    # for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
+    #     monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
+    #
+    #     for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
+    #         daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.iterdir()))
+    #
+    #         for raw_s3_log_file_path in tqdm.tqdm(
+    #             iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
+    #         ):
+    #             parse_dandi_raw_s3_log(
+    #                 raw_s3_log_file_path=raw_s3_log_file_path,
+    #                 parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+    #                 mode=mode,
+    #                 excluded_ips=excluded_ips,
+    #                 exclude_github_ips=False,  # Already included in list so avoid repeated construction
+    #                 asset_id_handler=asset_id_handler,
+    #             )
