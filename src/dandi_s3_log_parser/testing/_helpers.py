@@ -36,25 +36,34 @@ def find_random_example_line(
     all_raw_s3_log_file_paths = list(raw_s3_log_folder_path.rglob(pattern="*.log"))
 
     random.seed(seed)
-    random_log_file_path = random.choice(seq=all_raw_s3_log_file_paths)
-
-    with open(file=random_log_file_path, mode="r") as io:
-        all_lines = io.readlines()
+    random.shuffle(all_raw_s3_log_file_paths)
 
     lines_by_request_type = collections.defaultdict(list)
     running_counts_by_request_type = collections.defaultdict(int)
-    for line in all_lines:
-        subline = line[170]  # 170 is just an estimation
-        subline_items = subline.split(" ")
+    for random_log_file_path in all_raw_s3_log_file_paths:
+        with open(file=random_log_file_path, mode="r") as io:
+            all_lines = io.readlines()
 
-        # If line is as expected, some type of REST query should be at index 7
-        if len(subline_items) < 8:
-            continue
+        for line in all_lines:
+            subline = line[170]  # 170 is just an estimation
+            subline_items = subline.split(" ")
 
-        # Result at this point should appear as something like 'REST.GET.OBJECT'
-        estimated_request_type = subline[7].split(".")[1]
-        lines_by_request_type[estimated_request_type].append(line)
-        running_counts_by_request_type[estimated_request_type] += 1
+            # If line is as expected, some type of REST query should be at index 7
+            if len(subline_items) < 8:
+                continue
+
+            # Result at this point should appear as something like 'REST.GET.OBJECT'
+            estimated_request_type = subline[7].split(".")[1]
+            lines_by_request_type[estimated_request_type].append(line)
+            running_counts_by_request_type[estimated_request_type] += 1
+
+            if running_counts_by_request_type[estimated_request_type] > maximum_lines_per_request_type:
+                break
+
+        print(
+            f"No lines found for request type ('{request_type}') in file '{random_log_file_path}'! "
+            "Scanning the next file..."
+        )
 
         if running_counts_by_request_type[estimated_request_type] > maximum_lines_per_request_type:
             break
