@@ -1,13 +1,14 @@
 """Various private utility functions for handling IP address related tasks."""
 
 import ipaddress
+import hashlib
 from typing import List
 
 import ipinfo
 import requests
 import yaml
 
-from ._config import _IP_ADDRESS_TO_REGION_FILE_PATH, IPINFO_CREDENTIALS
+from ._config import _IP_ADDRESS_TO_REGION_FILE_PATH, IPINFO_CREDENTIALS, IPINFO_HASH_SALT
 
 
 def _cidr_address_to_ip_range(cidr_address: str) -> List[str]:
@@ -50,20 +51,24 @@ def _load_ip_address_to_region_cache() -> dict[str, str]:
         return yaml.load(stream=stream, Loader=yaml.SafeLoader)
 
 
-def _save_ip_address_to_region_cache(ip_address_to_region: dict[str, str]) -> None:
+def _save_ip_address_to_region_cache(ip_hash_to_region: dict[str, str]) -> None:
     """Save the IP address to region cache to disk."""
     with open(file=_IP_ADDRESS_TO_REGION_FILE_PATH, mode="w") as stream:
-        yaml.dump(data=ip_address_to_region, stream=stream)
+        yaml.dump(data=ip_hash_to_region, stream=stream)
 
 
-def _get_region_from_ip_address(ip_address_to_region: dict[str, str], ip_address: str) -> str:
+def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: str) -> str:
     """
     If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
     Instead, identify the generic region of the world the request came from and report that instead.
     """
+    ip_hasher = hashlib.sha1()
+    ip_hasher.update(bytes(ip_address, "utf-8") + IPINFO_HASH_SALT)
+    ip_hash = ip_hasher.hexdigest()
+
     # Early return for speed
-    lookup_result = ip_address_to_region.get(ip_address, None)
+    lookup_result = ip_hash_to_region.get(ip_address, None)
     if lookup_result is not None:
         return lookup_result
 
@@ -83,6 +88,6 @@ def _get_region_from_ip_address(ip_address_to_region: dict[str, str], ip_address
             region_string = country
         case (False, False):
             region_string = f"{country}/{region}"
-    ip_address_to_region[ip_address] = region_string
+    ip_hash_to_region[ip_hash] = region_string
 
     return region_string

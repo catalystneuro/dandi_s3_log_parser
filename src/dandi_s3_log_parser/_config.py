@@ -13,10 +13,18 @@ if "IPINFO_CREDENTIALS" not in os.environ:
     raise ValueError("The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!")
 IPINFO_CREDENTIALS = os.environ["IPINFO_CREDENTIALS"]
 
+if "IPINFO_HASH_SALT" not in os.environ:
+    raise ValueError(
+        "The environment variable 'IPINFO_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
+        "To retrieve the value, use the `get_hash_salt` helper function and set as environment variable using \n\n"
+        r"export IPINFO_HASH_SALT=$'\x...'\n"
+    )
+IPINFO_HASH_SALT = bytes(os.environ["IPINFO_HASH_SALT"], "utf-8")
 
-def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> bytes:
+
+def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> str:
     """
-    Calculate the salt (in bytes) used for IP hashing.
+    Calculate the salt (in utf-8 encoded bytes) used for IP hashing.
 
     Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
 
@@ -32,4 +40,4 @@ def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> bytes:
 
     hash_salt = hashlib.sha1(string=bytes(first_line, "utf-8"))
 
-    return hash_salt.digest()
+    return hash_salt.digest().encode("utf-8")

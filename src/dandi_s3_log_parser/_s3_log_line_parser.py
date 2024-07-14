@@ -123,7 +123,7 @@ def _append_reduced_log_line(
     excluded_ips: collections.defaultdict[str, bool],
     log_file_path: pathlib.Path,
     index: int,
-    ip_address_to_region: dict[str, str],
+    ip_hash_to_region: dict[str, str],
 ) -> None:
     """
     Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
@@ -179,7 +179,7 @@ def _append_reduced_log_line(
 
     parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
     parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
-    region = _get_region_from_ip_address(ip_address_to_region=ip_address_to_region, ip_address=full_log_line.remote_ip)
+    region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.remote_ip)
     reduced_log_line = ReducedLogLine(
         asset_id=full_log_line.asset_id,
         timestamp=parsed_timestamp,
