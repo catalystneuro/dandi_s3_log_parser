@@ -44,6 +44,7 @@ def parse_dandi_raw_s3_log_cli() -> None:
     help="The seed to use for the random number generator. The default is 0.",
     required=False,
     type=click.IntRange(min=0),
+    default=0,
 )
 def find_random_example_line_cli(
     raw_s3_log_folder_path: str | pathlib.Path,

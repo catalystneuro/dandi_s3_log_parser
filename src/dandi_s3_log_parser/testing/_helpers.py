@@ -75,6 +75,8 @@ def find_random_example_line(
             raw_request_line = subline_items[7].split(".")
             if len(raw_request_line) != 3:
                 raise ValueError(f"Bad request line found: {raw_request_line}")
+            if raw_request_line[2] != "OBJECT":
+                continue
             estimated_request_type = raw_request_line[1]
 
             lines_by_request_type[estimated_request_type].append(all_lines[line_index])
