@@ -4,14 +4,15 @@ import pathlib
 import click
 from typing import Literal
 
-from ._s3_log_file_parser import parse_raw_s3_log
+from ._s3_log_file_parser import parse_dandi_raw_s3_log
 from .testing._helpers import find_random_example_line
 from ._config import REQUEST_TYPES
 
 
 # TODO
-def main() -> None:
-    parse_raw_s3_log()
+@click.command(name="parse_dandi_raw_s3_logs_cli")
+def parse_dandi_raw_s3_log_cli() -> None:
+    parse_dandi_raw_s3_log()
 
 
 @click.command(name="find_random_example_line_cli")
@@ -33,7 +34,3 @@ def find_random_example_line_cli(
         raw_s3_log_folder_path=raw_s3_log_folder_path, request_type=request_type, seed=seed
     )
     print(example_line)
-
-
-if __name__ == "__main__":
-    main()
