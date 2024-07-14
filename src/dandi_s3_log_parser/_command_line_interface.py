@@ -19,13 +19,15 @@ def parse_dandi_raw_s3_log_cli() -> None:
 @click.option(
     "--raw_s3_log_folder_path",
     required=True,
-    type=click.Path(writable=True),
+    type=click.Path(writable=False),
     help="The path to the folder containing the raw S3 log files.",
 )
 @click.option(
     "--request_type", required=True, type=click.Choice(REQUEST_TYPES), help="The type of request to filter for."
 )
-@click.option("--seed", required=True, type=int, help="The seed to use for the random number generator.")
+@click.option(
+    "--seed", required=False, type=int, help="The seed to use for the random number generator. The default is 0."
+)
 def find_random_example_line_cli(
     raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal[REQUEST_TYPES], seed: int = 0
 ) -> None:
