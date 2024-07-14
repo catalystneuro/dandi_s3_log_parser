@@ -8,7 +8,7 @@ import ipinfo
 import requests
 import yaml
 
-from ._config import _IP_ADDRESS_TO_REGION_FILE_PATH, IPINFO_CREDENTIALS, IPINFO_HASH_SALT
+from ._config import _IP_HASH_TO_REGION_FILE_PATH, IPINFO_CREDENTIALS, IPINFO_HASH_SALT
 
 
 def _cidr_address_to_ip_range(cidr_address: str) -> List[str]:
@@ -44,16 +44,16 @@ def _get_latest_github_ip_ranges() -> list[str]:
 
 def _load_ip_address_to_region_cache() -> dict[str, str]:
     """Load the IP address to region cache from disk."""
-    if not _IP_ADDRESS_TO_REGION_FILE_PATH.exists():
+    if not _IP_HASH_TO_REGION_FILE_PATH.exists():
         return dict()
 
-    with open(file=_IP_ADDRESS_TO_REGION_FILE_PATH, mode="r") as stream:
+    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="r") as stream:
         return yaml.load(stream=stream, Loader=yaml.SafeLoader)
 
 
 def _save_ip_address_to_region_cache(ip_hash_to_region: dict[str, str]) -> None:
     """Save the IP address to region cache to disk."""
-    with open(file=_IP_ADDRESS_TO_REGION_FILE_PATH, mode="w") as stream:
+    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
         yaml.dump(data=ip_hash_to_region, stream=stream)
 
 
@@ -63,12 +63,10 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
 
     Instead, identify the generic region of the world the request came from and report that instead.
     """
-    ip_hasher = hashlib.sha1()
-    ip_hasher.update(bytes(ip_address, "utf-8") + IPINFO_HASH_SALT)
-    ip_hash = ip_hasher.hexdigest()
+    ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + IPINFO_HASH_SALT).hexdigest()
 
     # Early return for speed
-    lookup_result = ip_hash_to_region.get(ip_address, None)
+    lookup_result = ip_hash_to_region.get(ip_hash, None)
     if lookup_result is not None:
         return lookup_result
 
