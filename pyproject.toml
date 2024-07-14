@@ -25,6 +25,7 @@ dependencies = [
     "ipinfo",
     "PyYAML",
     "click",
+    "natsort",
 ]
 classifiers = [
     "Programming Language :: Python",
