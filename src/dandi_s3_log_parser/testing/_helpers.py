@@ -57,7 +57,7 @@ def find_random_example_line(
             lines_by_request_type[estimated_request_type].append(line)
             running_counts_by_request_type[estimated_request_type] += 1
 
-            if running_counts_by_request_type[estimated_request_type] > maximum_lines_per_request_type:
+            if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
                 break
 
         print(
@@ -65,7 +65,7 @@ def find_random_example_line(
             "Scanning the next file..."
         )
 
-        if running_counts_by_request_type[estimated_request_type] > maximum_lines_per_request_type:
+        if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
             break
 
     random_line = random.choice(seq=lines_by_request_type[request_type])
