@@ -40,4 +40,5 @@ def find_random_example_line(
     random_line_items[4] = "192.0.2.0"
 
     anonymized_random_line = " ".join(random_line_items)
+
     return anonymized_random_line
