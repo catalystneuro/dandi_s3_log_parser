@@ -5,11 +5,24 @@ import pathlib
 import random
 from typing import Literal
 
+from ._config import REQUEST_TYPES
+
 
 def find_random_example_line(
-    raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal["GET", "PUT", "HEAD"], seed: int = 0
+    raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal[REQUEST_TYPES], seed: int = 0
 ) -> str:
-    """Return a random example line from a folder of raw S3 log files."""
+    """
+    Return a randomly chosen line from a folder of raw S3 log files to serve as an example for testing purposes.
+
+    Parameters
+    ----------
+    raw_s3_log_folder_path : str | pathlib.Path
+        The path to the folder containing the raw S3 log files.
+    request_type : string
+        The type of request to filter for.
+    seed : int
+        The seed to use for the random number generator.
+    """
     raw_s3_log_folder_path = pathlib.Path(raw_s3_log_folder_path)
 
     all_raw_s3_log_file_paths = list(raw_s3_log_folder_path.rglob(pattern="*.log"))
