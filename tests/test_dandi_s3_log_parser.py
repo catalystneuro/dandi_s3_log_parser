@@ -47,3 +47,6 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
         )
         expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path)
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
+
+
+# TODO: add tests for API and CLI usage of finding random example line from testing submodule
