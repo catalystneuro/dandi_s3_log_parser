@@ -5,7 +5,7 @@ import pathlib
 import random
 from typing import Literal
 
-from ._config import REQUEST_TYPES
+from .._config import REQUEST_TYPES
 
 
 def find_random_example_line(
