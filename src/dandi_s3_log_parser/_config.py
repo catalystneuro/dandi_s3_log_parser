@@ -19,12 +19,12 @@ if "IPINFO_HASH_SALT" not in os.environ:
         "To retrieve the value, set a temporary value to this environment variable and then use the `get_hash_salt` "
         "helper function and set it to the correct value."
     )
-IPINFO_HASH_SALT = bytes(os.environ["IPINFO_HASH_SALT"], "utf-8")
+IPINFO_HASH_SALT = bytes.fromhex(os.environ["IPINFO_HASH_SALT"])
 
 
 def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> str:
     """
-    Calculate the salt (in utf-8 encoded bytes) used for IP hashing.
+    Calculate the salt (in hexadecimal encoding) used for IP hashing.
 
     Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
 
@@ -40,4 +40,4 @@ def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> str:
 
     hash_salt = hashlib.sha1(string=bytes(first_line, "utf-8"))
 
-    return hash_salt.digest().decode("utf-8")
+    return hash_salt.hexdigest()
