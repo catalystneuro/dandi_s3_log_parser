@@ -2,10 +2,13 @@
 
 import collections
 import pathlib
+import random
 from typing import Literal
 
 
-def find_random_example_line(raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal["GET", "PUT", "HEAD"], seed: int = 0) -> str:
+def find_random_example_line(
+    raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal["GET", "PUT", "HEAD"], seed: int = 0
+) -> str:
     """Return a random example line from a folder of raw S3 log files."""
     raw_s3_log_folder_path = pathlib.Path(raw_s3_log_folder_path)
 
@@ -19,7 +22,7 @@ def find_random_example_line(raw_s3_log_folder_path: str | pathlib.Path, request
 
     lines_by_request_type = collections.defaultdict(list)
     for line in all_lines:
-        subline = line[170] # 170 is just an estimation
+        subline = line[170]  # 170 is just an estimation
         subline_items = subline.split(" ")
 
         # If line is as expected, some type of REST query should be at index 7
