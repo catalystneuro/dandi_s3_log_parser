@@ -203,7 +203,7 @@ def parse_dandi_raw_s3_log(
     raw_s3_log_file_path : string or pathlib.Path
         Path to the raw S3 log file.
     parsed_s3_log_folder_path : string or pathlib.Path
-        Path to write each parsed S3 log file to.
+        The path to write each parsed S3 log file to.
         There will be one file per handled asset ID.
     mode : "w" or "a", default: "a"
         How to resolve the case when files already exist in the folder containing parsed logs.
@@ -252,7 +252,7 @@ def parse_dandi_raw_s3_log(
     )
 
 
-def batch_parse_all_dandi_raw_s2_logs(
+def parse_all_dandi_raw_s3_logs(
     *,
     base_raw_s3_log_folder_path: str | pathlib.Path,
     parsed_s3_log_folder_path: str | pathlib.Path,
