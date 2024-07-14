@@ -10,12 +10,12 @@ from ._config import REQUEST_TYPES
 
 
 # TODO
-@click.command(name="parse_dandi_raw_s3_logs_cli")
+@click.command(name="parse_dandi_raw_s3_logs")
 def parse_dandi_raw_s3_log_cli() -> None:
     parse_dandi_raw_s3_log()
 
 
-@click.command(name="find_random_example_line_cli")
+@click.command(name="find_random_example_line")
 @click.option(
     "--raw_s3_log_folder_path",
     required=True,
