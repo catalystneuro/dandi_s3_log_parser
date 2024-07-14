@@ -1,6 +1,7 @@
 """Primary functions for parsing raw S3 log file for DANDI."""
 
 import collections
+import datetime
 import pathlib
 from typing import Callable, Literal
 
@@ -14,6 +15,7 @@ from ._ip_utils import (
     _save_ip_address_to_region_cache,
 )
 from ._s3_log_line_parser import ReducedLogLine, _append_reduced_log_line
+from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 
 
 def _get_reduced_log_lines(
@@ -181,6 +183,14 @@ def parse_raw_s3_log(
         data_frame = pandas.DataFrame(data=reduced_logs_per_asset)
         data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t")
 
+    progress_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "progress"
+    progress_folder_path.mkdir(exist_ok=True)
+
+    date = datetime.datetime.now().strftime("%y%m%d")
+    progress_file_path = progress_folder_path / f"{date}.txt"
+    with open(file=progress_file_path, mode="a") as io:
+        io.write(f"Parsed {raw_s3_log_file_path} successfully!\n")
+
 
 def parse_dandi_raw_s3_log(
     *,
@@ -300,25 +310,24 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    all_daily_raw_s3_log_file_paths = [str(path) for path in base_raw_s3_log_folder_path.rglob(pattern="*/*/*.log")]
-    print(natsort.natsorted(seq=all_daily_raw_s3_log_file_paths))
+    # A particular aspect of the archive log repo structure
+    base_folder_paths = set(base_raw_s3_log_folder_path.iterdir()) - set(["code", "stats"])
+    yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
 
-    # yearly_folder_paths = natsort.natsorted(seq=list(base_raw_s3_log_folder_path.iterdir()))
-    #
-    # for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
-    #     monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
-    #
-    #     for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
-    #         daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.iterdir()))
-    #
-    #         for raw_s3_log_file_path in tqdm.tqdm(
-    #             iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
-    #         ):
-    #             parse_dandi_raw_s3_log(
-    #                 raw_s3_log_file_path=raw_s3_log_file_path,
-    #                 parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-    #                 mode=mode,
-    #                 excluded_ips=excluded_ips,
-    #                 exclude_github_ips=False,  # Already included in list so avoid repeated construction
-    #                 asset_id_handler=asset_id_handler,
-    #             )
+    for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
+        monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
+
+        for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
+            daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.iterdir()))
+
+            for raw_s3_log_file_path in tqdm.tqdm(
+                iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
+            ):
+                parse_dandi_raw_s3_log(
+                    raw_s3_log_file_path=raw_s3_log_file_path,
+                    parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+                    mode=mode,
+                    excluded_ips=excluded_ips,
+                    exclude_github_ips=False,  # Already included in list so avoid repeated construction
+                    asset_id_handler=asset_id_handler,
+                )
