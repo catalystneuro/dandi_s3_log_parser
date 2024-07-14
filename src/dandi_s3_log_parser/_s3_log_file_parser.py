@@ -300,7 +300,7 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    all_daily_raw_s3_log_file_paths = [str(path) for path in base_raw_s3_log_folder_path.rglob(pattern="*.log")]
+    all_daily_raw_s3_log_file_paths = [str(path) for path in base_raw_s3_log_folder_path.rglob(pattern="*/*/*.log")]
     print(natsort.natsorted(seq=all_daily_raw_s3_log_file_paths))
 
     # yearly_folder_paths = natsort.natsorted(seq=list(base_raw_s3_log_folder_path.iterdir()))
