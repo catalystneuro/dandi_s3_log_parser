@@ -318,7 +318,7 @@ def parse_all_dandi_raw_s3_logs(
         monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
 
         for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
-            daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.iterdir()))
+            daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.glob("*.log")))
 
             for raw_s3_log_file_path in tqdm.tqdm(
                 iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
