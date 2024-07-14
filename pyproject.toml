@@ -24,6 +24,7 @@ dependencies = [
     "tqdm",
     "ipinfo",
     "PyYAML",
+    "click",
 ]
 classifiers = [
     "Programming Language :: Python",
@@ -34,7 +35,8 @@ classifiers = [
 ]
 
 [project.scripts]
-parse_s3_logs = "dandi_s3_log_parser._command_line_interface:main"
+parse_dandi_raw_s3_logs = "dandi_s3_log_parser._command_line_interface:parse_dandi_raw_s3_logs_cli"
+find_random_example_line = "dandi_s3_log_parser._command_line_interface:find_random_example_line_cli"
 
 
 
