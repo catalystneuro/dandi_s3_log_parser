@@ -130,7 +130,7 @@ def _append_reduced_log_line(
 
     Parameters
     ----------
-    raw_line : str
+    raw_line : string
         A single line from the raw S3 log file.
     reduced_log_lines : list of ReducedLogLine
         The list of ReducedLogLine objects to mutate in place.

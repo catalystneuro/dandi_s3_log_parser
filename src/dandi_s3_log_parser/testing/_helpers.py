@@ -9,17 +9,25 @@ from .._config import REQUEST_TYPES
 
 
 def find_random_example_line(
-    raw_s3_log_folder_path: str | pathlib.Path, request_type: Literal[REQUEST_TYPES], seed: int = 0
+    raw_s3_log_folder_path: str | pathlib.Path,
+    request_type: Literal[REQUEST_TYPES],
+    maximum_lines_per_request_type: int = 100,
+    seed: int = 0,
 ) -> str:
     """
     Return a randomly chosen line from a folder of raw S3 log files to serve as an example for testing purposes.
 
     Parameters
     ----------
-    raw_s3_log_folder_path : str | pathlib.Path
+    raw_s3_log_folder_path : string | pathlib.Path
         The path to the folder containing the raw S3 log files.
     request_type : string
         The type of request to filter for.
+    maximum_lines_per_request_type : integer
+        The maximum number of lines to randomly sample for each request type.
+        The default is 100.
+
+        These lines are always found chronologically from the start of the file.
     seed : int
         The seed to use for the random number generator.
     """
@@ -34,6 +42,7 @@ def find_random_example_line(
         all_lines = io.readlines()
 
     lines_by_request_type = collections.defaultdict(list)
+    running_counts_by_request_type = collections.defaultdict(int)
     for line in all_lines:
         subline = line[170]  # 170 is just an estimation
         subline_items = subline.split(" ")
@@ -45,6 +54,10 @@ def find_random_example_line(
         # Result at this point should appear as something like 'REST.GET.OBJECT'
         estimated_request_type = subline[7].split(".")[1]
         lines_by_request_type[estimated_request_type].append(line)
+        running_counts_by_request_type[estimated_request_type] += 1
+
+        if running_counts_by_request_type[estimated_request_type] > maximum_lines_per_request_type:
+            break
 
     random_line = random.choice(seq=lines_by_request_type[request_type])
 
