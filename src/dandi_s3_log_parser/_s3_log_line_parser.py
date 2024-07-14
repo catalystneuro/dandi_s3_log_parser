@@ -159,7 +159,9 @@ def _append_reduced_log_line(
         return None
 
     # Skip all non-perfect status
-    if full_log_line.status_code != "200":
+    # 200: Success
+    # 206: Partial Content
+    if full_log_line.status_code not in ["200", "206"]:
         return None
 
     # Derived from command string, e.g., "HEAD /blobs/b38/..."
