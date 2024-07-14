@@ -59,10 +59,10 @@ def _get_reduced_log_lines(
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
                 index=index,
-                ip_address_to_region=ip_address_to_region,
+                ip_hash_to_region=ip_address_to_region,
             )
 
-    _save_ip_address_to_region_cache(ip_address_to_region=ip_address_to_region)
+    _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
 
     return reduced_log_lines
 
