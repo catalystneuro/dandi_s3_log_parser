@@ -40,25 +40,44 @@ def find_random_example_line(
 
     lines_by_request_type = collections.defaultdict(list)
     running_counts_by_request_type = collections.defaultdict(int)
+
+    # Unsafe - but possibly faster
     for random_log_file_path in all_raw_s3_log_file_paths:
         with open(file=random_log_file_path, mode="r") as io:
             all_lines = io.readlines()
 
-        for line in all_lines:
-            subline = line[:170]  # 170 is just an estimation
-            subline_items = subline.split(" ")
-
-            # If line is as expected, some type of REST query should be at index 7
-            if len(subline_items) < 8:
-                continue
-
-            # Result at this point should appear as something like 'REST.GET.OBJECT'
-            estimated_request_type = subline[7].split(".")[1]
-            lines_by_request_type[estimated_request_type].append(line)
+        # 170 is just an estimation
+        # Unsafe: Might not have parsed 7+ elements from " " split
+        # Unsafe: Might not have parsed 1+ elements from second "." split
+        estimated_request_type_by_line = [line[:170].split(" ")[7].split(".")[1] for line in all_lines]
+        for line_index, estimated_request_type in enumerate(estimated_request_type_by_line):
+            lines_by_request_type[estimated_request_type].append(all_lines[line_index])
             running_counts_by_request_type[estimated_request_type] += 1
 
             if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
                 break
+        if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
+            break
+
+        # Safe
+        # for random_log_file_path in all_raw_s3_log_file_paths:
+        #     with open(file=random_log_file_path, mode="r") as io:
+        #         all_lines = io.readlines()
+        #
+        #     # 170 is just an estimation
+        #     sublines_items = [line[:170].split(" ") for line in all_lines]
+        #     for line_index, subline_items in enumerate(sublines_items):
+        #         # If line is as expected, some type of REST query should be at index 7
+        #         if len(subline_items) < 8:
+        #             continue
+        #
+        #         # Result at this point should appear as something like 'REST.GET.OBJECT'
+        #         estimated_request_type = subline_items[7].split(".")[1]
+        #         lines_by_request_type[estimated_request_type].append(all_lines[line_index])
+        #         running_counts_by_request_type[estimated_request_type] += 1
+        #
+        #         if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
+        #             break
 
         print(
             f"No lines found for request type ('{request_type}') in file '{random_log_file_path}'! "
