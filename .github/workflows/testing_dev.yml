@@ -2,12 +2,15 @@ name: Dev tests
 on:
   workflow_call:
     secrets:
+      IPINFO_HASH_SALT:
+        required: true
       IPINFO_CREDENTIALS:
         required: true
       CODECOV_CREDENTIALS:
         required: true
 
 env:
+  IPINFO_HASH_SALT: ${{ secrets.IPINFO_HASH_SALT }}
   IPINFO_CREDENTIALS: ${{ secrets.IPINFO_CREDENTIALS }}
 
 jobs:
