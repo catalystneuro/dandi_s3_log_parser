@@ -18,25 +18,32 @@ def parse_dandi_raw_s3_log_cli() -> None:
 @click.command(name="find_random_example_line")
 @click.option(
     "--raw_s3_log_folder_path",
+    help="The path to the folder containing the raw S3 log files.",
     required=True,
     type=click.Path(writable=False),
-    help="The path to the folder containing the raw S3 log files.",
 )
 @click.option(
-    "--request_type", required=True, type=click.Choice(REQUEST_TYPES), help="The type of request to filter for."
+    "--request_type",
+    help="The type of request to filter for.",
+    required=True,
+    type=click.Choice(REQUEST_TYPES),
 )
 @click.option(
     "--maximum_lines_per_request_type",
-    required=True,
-    type=click.Choice(REQUEST_TYPES),
     help=(
         "The maximum number of lines to randomly sample for each request type. "
         "The default is 100. \n"
         "These lines are always found chronologically from the start of the file."
     ),
+    required=False,
+    type=click.IntRange(min=2),
+    default=100,
 )
 @click.option(
-    "--seed", required=False, type=int, help="The seed to use for the random number generator. The default is 0."
+    "--seed",
+    help="The seed to use for the random number generator. The default is 0.",
+    required=False,
+    type=click.IntRange(min=0),
 )
 def find_random_example_line_cli(
     raw_s3_log_folder_path: str | pathlib.Path,
