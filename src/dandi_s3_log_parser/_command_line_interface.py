@@ -32,7 +32,7 @@ def parse_dandi_raw_s3_log_cli() -> None:
     "--maximum_lines_per_request_type",
     help=(
         "The maximum number of lines to randomly sample for each request type. "
-        "The default is 100. \n"
+        "The default is 5. \n"
         "These lines are always found chronologically from the start of the file."
     ),
     required=False,
@@ -48,7 +48,7 @@ def parse_dandi_raw_s3_log_cli() -> None:
 def find_random_example_line_cli(
     raw_s3_log_folder_path: str | pathlib.Path,
     request_type: Literal[REQUEST_TYPES],
-    maximum_lines_per_request_type: int = 100,
+    maximum_lines_per_request_type: int = 5,
     seed: int = 0,
 ) -> None:
     """Find a randomly chosen line from a folder of raw S3 log files to serve as an example for testing purposes."""

@@ -11,7 +11,7 @@ from .._config import REQUEST_TYPES
 def find_random_example_line(
     raw_s3_log_folder_path: str | pathlib.Path,
     request_type: Literal[REQUEST_TYPES],
-    maximum_lines_per_request_type: int = 100,
+    maximum_lines_per_request_type: int = 5,
     seed: int = 0,
 ) -> str:
     """
@@ -25,7 +25,7 @@ def find_random_example_line(
         The type of request to filter for.
     maximum_lines_per_request_type : integer
         The maximum number of lines to randomly sample for each request type.
-        The default is 100.
+        The default is 5.
 
         These lines are always found chronologically from the start of the file.
     seed : int
@@ -45,7 +45,7 @@ def find_random_example_line(
             all_lines = io.readlines()
 
         for line in all_lines:
-            subline = line[170]  # 170 is just an estimation
+            subline = line[:170]  # 170 is just an estimation
             subline_items = subline.split(" ")
 
             # If line is as expected, some type of REST query should be at index 7
