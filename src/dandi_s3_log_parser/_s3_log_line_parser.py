@@ -154,6 +154,9 @@ def _append_reduced_log_line(
         raw_line=raw_line,
     )
 
+    if full_log_line is None:
+        return None
+
     # Various early skip conditions
     if full_log_line.bucket != bucket:
         return None
