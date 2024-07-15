@@ -3,9 +3,9 @@
 import ipaddress
 import hashlib
 import traceback
-import importlib
 import datetime
 from typing import List
+from importlib.metadata import version as importlib_version
 
 import ipinfo
 import requests
@@ -103,7 +103,7 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
-        dandi_s3_log_parser_version = importlib.metadata.version("dandi_s3_log_parser")
+        dandi_s3_log_parser_version = importlib_version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_ipinfo_errors.txt"
 
