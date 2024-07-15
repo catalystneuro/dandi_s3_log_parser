@@ -16,9 +16,9 @@ The strategy is to...
 
 import collections
 import datetime
-import importlib
 import pathlib
 import re
+from importlib.metadata import version as importlib_version
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import _get_region_from_ip_address
@@ -104,7 +104,7 @@ def _get_full_log_line(
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
-        dandi_s3_log_parser_version = importlib.metadata.version("dandi_s3_log_parser")
+        dandi_s3_log_parser_version = importlib_version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
 
@@ -153,6 +153,9 @@ def _append_reduced_log_line(
         index=index,
         raw_line=raw_line,
     )
+
+    if full_log_line is None:
+        return None
 
     # Various early skip conditions
     if full_log_line.bucket != bucket:
