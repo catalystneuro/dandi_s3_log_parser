@@ -207,6 +207,7 @@ def parse_dandi_raw_s3_log(
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
     asset_id_handler: Callable | None = None,
+    tqdm_kwargs: dict | None = None,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -242,6 +243,8 @@ def parse_dandi_raw_s3_log(
             split_by_slash = raw_asset_id.split("/")
             return split_by_slash[0] + "_" + split_by_slash[-1]
     """
+    tqdm_kwargs = tqdm_kwargs or dict()
+
     bucket = "dandiarchive"
     request_type = "GET"
 
@@ -266,6 +269,7 @@ def parse_dandi_raw_s3_log(
         request_type=request_type,
         excluded_ips=excluded_ips,
         asset_id_handler=asset_id_handler,
+        tqdm_kwargs=tqdm_kwargs,
     )
 
 
@@ -320,10 +324,10 @@ def parse_all_dandi_raw_s3_logs(
     daily_raw_s3_log_file_paths = list()
     base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if path.stem.startswith("20")]
     yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
-    for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
+    for yearly_folder_path in yearly_folder_paths:
         monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
 
-        for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
+        for monthly_folder_path in monthly_folder_paths:
             daily_raw_s3_log_file_paths.extend(natsort.natsorted(seq=list(monthly_folder_path.glob("*.log"))))
 
     for raw_s3_log_file_path in tqdm.tqdm(
