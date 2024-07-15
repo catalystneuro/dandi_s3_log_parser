@@ -318,7 +318,7 @@ def parse_all_dandi_raw_s3_logs(
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
     daily_raw_s3_log_file_paths = list()
-    base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if str(path).startswith("20")]
+    base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if path.stem.startswith("20")]
     yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
     for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
         monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
