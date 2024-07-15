@@ -54,9 +54,9 @@ def _get_reduced_log_lines(
     with open(file=raw_s3_log_file_path, mode="r") as io:
         # Perform I/O read in one batch to improve performance
         # TODO: for larger files, this loads entirely into RAM - need buffering
-        raw_lines = tqdm.tqdm(
-            iterable=io.readlines(), desc="Parsing lines...", leave=False, mininterval=1.0, **tqdm_kwargs
-        )
+        resolved_tqdm_kwargs = dict(desc="Parsing lines...", leave=False, mininterval=1.0)
+        resolved_tqdm_kwargs.update(tqdm_kwargs)
+        raw_lines = tqdm.tqdm(iterable=io.readlines(), **resolved_tqdm_kwargs)
         for index, raw_line in enumerate(raw_lines):
             _append_reduced_log_line(
                 raw_line=raw_line,
