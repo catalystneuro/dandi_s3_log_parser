@@ -24,6 +24,7 @@ def _get_reduced_log_lines(
     bucket: str | None,
     request_type: Literal["GET", "PUT"],
     excluded_ips: collections.defaultdict[str, bool],
+    tqdm_kwargs: dict | None = None,
 ) -> list[ReducedLogLine]:
     """
     Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
@@ -43,6 +44,7 @@ def _get_reduced_log_lines(
 
     # Collapse bucket to empty string instead of asking if it is None on each iteration
     bucket = "" if bucket is None else bucket
+    tqdm_kwargs = tqdm_kwargs or dict()
 
     # One-time initialization/read of IP address to region cache for performance
     # This dictionary is intended to be mutated throughout the process
@@ -53,8 +55,8 @@ def _get_reduced_log_lines(
         # Perform I/O read in one batch to improve performance
         # TODO: for larger files, this loads entirely into RAM - need buffering
         raw_lines = tqdm.tqdm(
-            iterable=io.readlines(), position=3
-        )  # TODO: limit update speed of tqdm to improve performance
+            iterable=io.readlines(), desc="Parsing lines...", leave=False, mininterval=1.0, **tqdm_kwargs
+        )
         for index, raw_line in enumerate(raw_lines):
             _append_reduced_log_line(
                 raw_line=raw_line,
@@ -83,6 +85,7 @@ def parse_raw_s3_log(
     number_of_jobs: int = 1,
     total_memory_in_bytes: int = 1e9,
     asset_id_handler: Callable | None = None,
+    tqdm_kwargs: dict | None = None,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -133,6 +136,7 @@ def parse_raw_s3_log(
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
     parsed_s3_log_folder_path.mkdir(exist_ok=True)
     excluded_ips = excluded_ips or collections.defaultdict(bool)
+    tqdm_kwargs = tqdm_kwargs or dict()
 
     # TODO: buffering control
     # total_file_size_in_bytes = raw_s3_log_file_path.lstat().st_size
@@ -157,6 +161,7 @@ def parse_raw_s3_log(
             bucket=bucket,
             request_type=request_type,
             excluded_ips=excluded_ips,
+            tqdm_kwargs=tqdm_kwargs,
         )
 
     reduced_logs_binned_by_unparsed_asset = dict()
@@ -312,24 +317,27 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    # A particular aspect of the archive log repo structure
-    base_folder_paths = set(base_raw_s3_log_folder_path.iterdir()) - set(["code", "stats"])
+    daily_raw_s3_log_file_paths = list()
+    base_folder_paths = set(base_raw_s3_log_folder_path.iterdir()) - set(["code", "stats"])  # Exclude repo folders
     yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
-
     for yearly_folder_path in tqdm.tqdm(iterable=yearly_folder_paths, desc="Parsing by year...", position=0):
         monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
 
         for monthly_folder_path in tqdm.tqdm(iterable=monthly_folder_paths, desc="Parsing by month...", position=1):
-            daily_raw_s3_log_file_paths = natsort.natsorted(seq=list(monthly_folder_path.glob("*.log")))
+            daily_raw_s3_log_file_paths.extend(natsort.natsorted(seq=list(monthly_folder_path.glob("*.log"))))
 
-            for raw_s3_log_file_path in tqdm.tqdm(
-                iterable=daily_raw_s3_log_file_paths, desc="Parsing by day...", position=2
-            ):
-                parse_dandi_raw_s3_log(
-                    raw_s3_log_file_path=raw_s3_log_file_path,
-                    parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-                    mode=mode,
-                    excluded_ips=excluded_ips,
-                    exclude_github_ips=False,  # Already included in list so avoid repeated construction
-                    asset_id_handler=asset_id_handler,
-                )
+    for raw_s3_log_file_path in tqdm.tqdm(
+        iterable=daily_raw_s3_log_file_paths,
+        desc="Parsing log files...",
+        position=0,
+        leave=True,
+    ):
+        parse_dandi_raw_s3_log(
+            raw_s3_log_file_path=raw_s3_log_file_path,
+            parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+            mode=mode,
+            excluded_ips=excluded_ips,
+            exclude_github_ips=False,  # Already included in list so avoid repeated construction
+            asset_id_handler=asset_id_handler,
+            tqdm_kwargs=dict(position=1, leave=False),
+        )

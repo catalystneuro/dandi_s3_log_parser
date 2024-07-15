@@ -2,13 +2,21 @@
 
 import ipaddress
 import hashlib
+import traceback
+import importlib
+import datetime
 from typing import List
 
 import ipinfo
 import requests
 import yaml
 
-from ._config import _IP_HASH_TO_REGION_FILE_PATH, IPINFO_CREDENTIALS, IPINFO_HASH_SALT
+from ._config import (
+    _IP_HASH_TO_REGION_FILE_PATH,
+    IPINFO_CREDENTIALS,
+    IPINFO_HASH_SALT,
+    DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH,
+)
 
 
 def _cidr_address_to_ip_range(cidr_address: str) -> List[str]:
@@ -70,22 +78,40 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
     if lookup_result is not None:
         return lookup_result
 
-    handler = ipinfo.getHandler(access_token=IPINFO_CREDENTIALS)
-    details = handler.getDetails(ip_address=ip_address)
+    # Log errors in IP fetching
+    try:
+        handler = ipinfo.getHandler(access_token=IPINFO_CREDENTIALS)
+        details = handler.getDetails(ip_address=ip_address)
 
-    country = details.details.get("country", None)
-    region = details.details.get("region", None)
+        country = details.details.get("country", None)
+        region = details.details.get("region", None)
 
-    region_string = ""  # Not technically necessary, but quiets the linter
-    match (country is None, region is None):
-        case (True, True):
-            region_string = "unknown"
-        case (True, False):
-            region_string = region
-        case (False, True):
-            region_string = country
-        case (False, False):
-            region_string = f"{country}/{region}"
-    ip_hash_to_region[ip_hash] = region_string
+        region_string = ""  # Not technically necessary, but quiets the linter
+        match (country is None, region is None):
+            case (True, True):
+                region_string = "unknown"
+            case (True, False):
+                region_string = region
+            case (False, True):
+                region_string = country
+            case (False, False):
+                region_string = f"{country}/{region}"
+        ip_hash_to_region[ip_hash] = region_string
 
-    return region_string
+        return region_string
+    except Exception as exception:
+        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+        errors_folder_path.mkdir(exist_ok=True)
+
+        dandi_s3_log_parser_version = importlib.metadata.version("dandi_s3_log_parser")
+        date = datetime.datetime.now().strftime("%y%m%d")
+        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_ipinfo_errors.txt"
+
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(
+                f"Error fetching IP information for {ip_address}!\n\n"
+                f"{type(exception)}: {str(exception)}\n\n"
+                f"{traceback.format_exc()}"
+            )
+
+        return "unknown"
