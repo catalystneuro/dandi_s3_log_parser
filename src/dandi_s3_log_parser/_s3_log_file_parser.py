@@ -16,6 +16,7 @@ from ._ip_utils import (
 )
 from ._s3_log_line_parser import ReducedLogLine, _append_reduced_log_line
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
+from ._buffered_text_reader import BufferedTextReader
 
 
 def _get_reduced_log_lines(
@@ -50,14 +51,15 @@ def _get_reduced_log_lines(
     # This dictionary is intended to be mutated throughout the process
     ip_address_to_region = _load_ip_address_to_region_cache()
 
+    # Perform I/O read in batches to improve performance
+    resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=1.0)
+    resolved_tqdm_kwargs.update(tqdm_kwargs)
+
     reduced_log_lines = list()
-    with open(file=raw_s3_log_file_path, mode="r") as io:
-        # Perform I/O read in one batch to improve performance
-        # TODO: for larger files, this loads entirely into RAM - need buffering
-        resolved_tqdm_kwargs = dict(desc="Parsing lines...", leave=False, mininterval=1.0)
-        resolved_tqdm_kwargs.update(tqdm_kwargs)
-        raw_lines = tqdm.tqdm(iterable=io.readlines(), **resolved_tqdm_kwargs)
-        for index, raw_line in enumerate(raw_lines):
+    per_buffer_index = 0
+    buffered_text_reader = BufferedTextReader(file_path=raw_s3_log_file_path)
+    for buffered_raw_lines in tqdm.tqdm(iterable=buffered_text_reader, **resolved_tqdm_kwargs):
+        for index, raw_line in enumerate(iterable=buffered_raw_lines, start=per_buffer_index):
             _append_reduced_log_line(
                 raw_line=raw_line,
                 reduced_log_lines=reduced_log_lines,
@@ -68,6 +70,7 @@ def _get_reduced_log_lines(
                 index=index,
                 ip_hash_to_region=ip_address_to_region,
             )
+        per_buffer_index += index
 
     _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
 
