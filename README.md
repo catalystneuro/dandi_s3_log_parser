@@ -28,6 +28,12 @@ parse_dandi_raw_s3_log --raw_s3_log_file_path < s3 log file path > --parsed_s3_l
 
 
 
+# Submit line decoding errors
+
+Please post line decoding errors collected from your local config file as issues before submitting PRs contributing them as examples, to more easily correct anonymization aspects.
+
+
+
 # Developer notes
 
 `.log` file suffixes should typically be ignored when working with Git, so when committing changes to the example log collection, you will have to forcibly include it with
