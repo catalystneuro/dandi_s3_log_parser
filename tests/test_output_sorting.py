@@ -5,7 +5,6 @@ import calendar
 import datetime
 
 SEED = 0
-random.seed(SEED)
 
 
 def _generate_random_datetime() -> datetime.datetime:
@@ -25,6 +24,8 @@ def _generate_random_datetime() -> datetime.datetime:
 
 def _generate_random_datetimes(number_of_elements: int) -> list[datetime.datetime]:
     """Generate random datetimes for testing."""
+    random.seed(SEED)
+
     random_datetimes = [_generate_random_datetime() for _ in range(number_of_elements)]
     return random_datetimes
 
