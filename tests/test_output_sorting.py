@@ -5,7 +5,7 @@ import calendar
 import datetime
 
 SEED = 0
-random.seed(seed=SEED)
+random.seed(SEED)
 
 
 def _generate_random_datetime() -> datetime.datetime:
@@ -19,7 +19,7 @@ def _generate_random_datetime() -> datetime.datetime:
     minute = random.randint(0, 59)
     second = random.randint(0, 59)
 
-    result = datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
+    result = datetime.datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
     return result
 
 
@@ -30,7 +30,7 @@ def _generate_random_datetimes(number_of_elements: int) -> list[datetime.datetim
 
 
 @pytest.fixture(scope="session")
-def unordered_output_file_content(tmp_path_factory: pytest.TempPathFactory) -> list[str]:
+def unordered_output_file_content(tmp_path_factory: pytest.TempPathFactory) -> list[list[str]]:
     """Generate file content equivalent to an unordered output file."""
     example_output_file_path = (
         pathlib.Path(__file__).parent
