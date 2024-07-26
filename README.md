@@ -30,7 +30,7 @@ parse_dandi_raw_s3_log --raw_s3_log_file_path < s3 log file path > --parsed_s3_l
 
 # Submit line decoding errors
 
-Please post line decoding errors collected from your local config file as issues before submitting PRs contributing them as examples, to more easily correct anonymization aspects.
+Please email line decoding errors collected from your local config file to the core maintainer before raising issues or submitting PRs contributing them as examples, to more easily correct any aspects that might require anonymization.
 
 
 
