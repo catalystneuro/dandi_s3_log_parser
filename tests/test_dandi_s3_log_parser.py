@@ -16,7 +16,7 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "example_0"
+    examples_folder_path = file_parent / "examples" / "ordered_example_0"
     example_raw_s3_log_file_path = examples_folder_path / "example_dandi_s3_log.log"
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
@@ -41,11 +41,11 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
             test_parsed_s3_log_file_path.stem in expected_asset_ids
         ), f"Asset ID {test_parsed_s3_log_file_path.stem} not found in expected asset IDs!"
 
-        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path)
+        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path, index_col=0)
         expected_parsed_s3_log_file_path = (
             expected_parsed_s3_log_folder_path / f"{test_parsed_s3_log_file_path.stem}.tsv"
         )
-        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path)
+        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path, index_col=0)
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
 
 
