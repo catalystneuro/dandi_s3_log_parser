@@ -3,6 +3,9 @@
 import collections
 import datetime
 import pathlib
+import os
+import uuid
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Literal
 
 import pandas
@@ -19,62 +22,240 @@ from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._buffered_text_reader import BufferedTextReader
 
 
-def _get_reduced_log_lines(
+def parse_all_dandi_raw_s3_logs(
     *,
-    raw_s3_log_file_path: pathlib.Path,
-    bucket: str | None,
-    request_type: Literal["GET", "PUT"],
-    excluded_ips: collections.defaultdict[str, bool],
-    tqdm_kwargs: dict | None = None,
-) -> list[ReducedLogLine]:
+    base_raw_s3_log_folder_path: str | pathlib.Path,
+    parsed_s3_log_folder_path: str | pathlib.Path,
+    mode: Literal["w", "a"] = "a",
+    excluded_ips: collections.defaultdict[str, bool] | None = None,
+    exclude_github_ips: bool = True,
+    number_of_jobs: int = 1,
+    maximum_ram_usage_in_bytes: int = 40**9,
+) -> None:
     """
-    Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
+    Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
+
+    Assumes the following folder structure...
+
+    |- <base_raw_s3_log_folder_path>
+    |-- 2019 (year)
+    |--- 01 (month)
+    |---- 01.log (day)
+    | ...
 
     Parameters
     ----------
-    raw_s3_log_file_path : str or pathlib.Path
-        Path to the raw S3 log file.
-    bucket : str
-        Only parse and return lines that match this bucket.
-    request_type : str
-        The type of request to filter for.
-    excluded_ips : collections.defaultdict of strings to booleans
+    base_raw_s3_log_folder_path : string or pathlib.Path
+        Path to the folder containing the raw S3 log files.
+    parsed_s3_log_folder_path : string or pathlib.Path
+        Path to write each parsed S3 log file to.
+        There will be one file per handled asset ID.
+    mode : "w" or "a", default: "a"
+        How to resolve the case when files already exist in the folder containing parsed logs.
+        "w" will overwrite existing content, "a" will append or create if the file does not yet exist.
+    excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    exclude_github_ips : bool, default: True
+        Include all GitHub action IP addresses in the `excluded_ips`.
+    number_of_jobs : int, default: 1
+        The number of jobs to use for parallel processing.
+        Allows negative range to mean 'all but this many (minus one) jobs'.
+        E.g., -1 means use all workers, -2 means all but one worker.
+        WARNING: planned but not yet supported.
+    maximum_ram_usage_in_bytes : int, default: 1 GB
+        The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
-    assert raw_s3_log_file_path.suffix == ".log", f"{raw_s3_log_file_path=} should end in '.log'!"
+    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
+    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
+    parsed_s3_log_folder_path.mkdir(exist_ok=True)
 
-    # Collapse bucket to empty string instead of asking if it is None on each iteration
-    bucket = "" if bucket is None else bucket
+    # Re-define some top-level pass-through items here to avoid repeated constructions
+    excluded_ips = excluded_ips or collections.defaultdict(bool)
+    if exclude_github_ips:
+        for github_ip in _get_latest_github_ip_ranges():
+            excluded_ips[github_ip] = True
+
+    def asset_id_handler(*, raw_asset_id: str) -> str:
+        split_by_slash = raw_asset_id.split("/")
+        return split_by_slash[0] + "_" + split_by_slash[-1]
+
+    daily_raw_s3_log_file_paths = list()
+    base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if path.stem.startswith("20")]
+    yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
+    for yearly_folder_path in yearly_folder_paths:
+        monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
+
+        for monthly_folder_path in monthly_folder_paths:
+            daily_raw_s3_log_file_paths.extend(natsort.natsorted(seq=list(monthly_folder_path.glob("*.log"))))
+
+    if number_of_jobs == 1:
+        for raw_s3_log_file_path in tqdm.tqdm(
+            iterable=daily_raw_s3_log_file_paths,
+            desc="Parsing log files...",
+            position=0,
+            leave=True,
+        ):
+            parse_dandi_raw_s3_log(
+                raw_s3_log_file_path=raw_s3_log_file_path,
+                parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+                mode=mode,
+                excluded_ips=excluded_ips,
+                exclude_github_ips=False,  # Already included in list so avoid repeated construction
+                asset_id_handler=asset_id_handler,
+                tqdm_kwargs=dict(position=1, leave=False),
+                maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+            )
+    else:
+        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
+        temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
+        temporary_base_folder_path.mkdir(exist_ok=True)
+        task_id = uuid.uuid4()[:5]
+        temporary_folder_path = temporary_base_folder_path / task_id
+        temporary_folder_path.mkdir(exist_ok=True)
+        for job_index in range(number_of_jobs):
+            per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+            per_job_temporary_folder_path.mkdir(exist_ok=True)
+
+        futures = []
+        with ProcessPoolExecutor(max_workers=number_of_jobs) as executor:
+            for raw_s3_log_file_path in daily_raw_s3_log_file_paths:
+                futures.append(
+                    executor.submit(
+                        _multi_job_parse_dandi_raw_s3_log,
+                        number_of_jobs=number_of_jobs,
+                        raw_s3_log_file_path=raw_s3_log_file_path,
+                        temporary_folder_path=temporary_folder_path,
+                        mode=mode,
+                        excluded_ips=excluded_ips,
+                        exclude_github_ips=False,  # Already included in list so avoid repeated construction
+                        asset_id_handler=asset_id_handler,
+                        maximum_ram_usage_in_bytes=int(maximum_ram_usage_in_bytes / number_of_jobs),
+                    )
+                )
+
+            # Perform the iteration to trigger processing
+            for _ in tqdm.tqdm(
+                iterable=as_completed(daily_raw_s3_log_file_paths),
+                desc=f"Parsing log files using {number_of_jobs} jobs...",
+                total=len(daily_raw_s3_log_file_paths),
+                position=0,
+                leave=True,
+            ):
+                pass
+
+        # TODO: merge results back to central (also temporary) folder
+        # TODO: order results chronologically
+
+    return None
+
+
+def _multi_job_parse_dandi_raw_s3_log(
+    *,
+    number_of_jobs: int,
+    raw_s3_log_file_path: pathlib.Path,
+    temporary_folder_path: pathlib.Path,
+    mode: Literal["w", "a"],
+    excluded_ips: collections.defaultdict[str, bool] | None,
+    exclude_github_ips: bool,
+    asset_id_handler: Callable | None,
+    maximum_ram_usage_in_bytes: int,
+) -> None:
+    """A mostly pass-through function to calculate the job index on the worker and target the correct subfolder."""
+    job_index = os.getpid() % number_of_jobs
+    per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+
+    parse_dandi_raw_s3_log(
+        raw_s3_log_file_path=raw_s3_log_file_path,
+        parsed_s3_log_folder_path=per_job_temporary_folder_path,
+        mode=mode,
+        excluded_ips=excluded_ips,
+        exclude_github_ips=exclude_github_ips,
+        asset_id_handler=asset_id_handler,
+        tqdm_kwargs=dict(position=job_index + 1, leave=False),
+        maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+    )
+
+    return None
+
+
+def parse_dandi_raw_s3_log(
+    *,
+    raw_s3_log_file_path: str | pathlib.Path,
+    parsed_s3_log_folder_path: str | pathlib.Path,
+    mode: Literal["w", "a"] = "a",
+    excluded_ips: collections.defaultdict[str, bool] | None = None,
+    exclude_github_ips: bool = True,
+    asset_id_handler: Callable | None = None,
+    tqdm_kwargs: dict | None = None,
+    maximum_ram_usage_in_bytes: int = 40**9,
+) -> None:
+    """
+    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+
+    'Parsing' here means:
+      - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
+      - reducing the information to the asset ID, request time, request size, and geographic IP of the requester
+
+    Parameters
+    ----------
+    raw_s3_log_file_path : string or pathlib.Path
+        Path to the raw S3 log file.
+    parsed_s3_log_folder_path : string or pathlib.Path
+        The path to write each parsed S3 log file to.
+        There will be one file per handled asset ID.
+    mode : "w" or "a", default: "a"
+        How to resolve the case when files already exist in the folder containing parsed logs.
+        "w" will overwrite existing content, "a" will append or create if the file does not yet exist.
+
+        The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
+        over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
+        HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
+    excluded_ips : collections.defaultdict of strings to booleans, optional
+        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    exclude_github_ips : bool, default: True
+        Include all GitHub action IP addresses in the `excluded_ips`.
+    asset_id_handler : callable, optional
+        If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
+        translate into nested directory paths) then define a function of the following form:
+
+        # For example
+        def asset_id_handler(*, raw_asset_id: str) -> str:
+            split_by_slash = raw_asset_id.split("/")
+            return split_by_slash[0] + "_" + split_by_slash[-1]
+    tqdm_kwargs : dict, optional
+        Keyword arguments to pass to the tqdm progress bar.
+    maximum_ram_usage_in_bytes : int, default: 1 GB
+        The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
+    """
     tqdm_kwargs = tqdm_kwargs or dict()
 
-    # One-time initialization/read of IP address to region cache for performance
-    # This dictionary is intended to be mutated throughout the process
-    ip_address_to_region = _load_ip_address_to_region_cache()
+    bucket = "dandiarchive"
+    request_type = "GET"
 
-    # Perform I/O read in batches to improve performance
-    resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=1.0)
-    resolved_tqdm_kwargs.update(tqdm_kwargs)
+    # Form a lookup for IP addresses to exclude; much faster than asking 'if in' a list on each iteration
+    # Exclude GitHub actions, which are responsible for running health checks on archive which bloat the logs
+    excluded_ips = excluded_ips or collections.defaultdict(bool)
+    if exclude_github_ips:
+        for github_ip in _get_latest_github_ip_ranges():
+            excluded_ips[github_ip] = True
 
-    reduced_log_lines = list()
-    per_buffer_index = 0
-    buffered_text_reader = BufferedTextReader(file_path=raw_s3_log_file_path)
-    for buffered_raw_lines in tqdm.tqdm(iterable=buffered_text_reader, **resolved_tqdm_kwargs):
-        for index, raw_line in enumerate(iterable=buffered_raw_lines, start=per_buffer_index):
-            _append_reduced_log_line(
-                raw_line=raw_line,
-                reduced_log_lines=reduced_log_lines,
-                bucket=bucket,
-                request_type=request_type,
-                excluded_ips=excluded_ips,
-                log_file_path=raw_s3_log_file_path,
-                index=index,
-                ip_hash_to_region=ip_address_to_region,
-            )
-        per_buffer_index += index
+    if asset_id_handler is None:
 
-    _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
+        def asset_id_handler(*, raw_asset_id: str) -> str:
+            split_by_slash = raw_asset_id.split("/")
+            return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    return reduced_log_lines
+    return parse_raw_s3_log(
+        raw_s3_log_file_path=raw_s3_log_file_path,
+        parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+        mode=mode,
+        bucket=bucket,
+        request_type=request_type,
+        excluded_ips=excluded_ips,
+        asset_id_handler=asset_id_handler,
+        tqdm_kwargs=tqdm_kwargs,
+        maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+    )
 
 
 def parse_raw_s3_log(
@@ -85,10 +266,9 @@ def parse_raw_s3_log(
     bucket: str | None = None,
     request_type: Literal["GET", "PUT"] = "GET",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
-    number_of_jobs: int = 1,
-    total_memory_in_bytes: int = 1e9,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
+    maximum_ram_usage_in_bytes: int = 40**9,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -117,15 +297,6 @@ def parse_raw_s3_log(
         The type of request to filter for.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    number_of_jobs : int, default: 1
-        The number of jobs to use for parallel processing.
-        Allows negative range to mean 'all but this many (minus one) jobs'.
-        E.g., -1 means use all workers, -2 means all but one worker.
-        WARNING: planned but not yet supported.
-    total_memory_in_bytes : int, default: 2e9
-        The number of bytes to load as a buffer into RAM per job.
-        Will automatically distribute this amount over the number of jobs.
-        WARNING: planned but not yet supported.
     asset_id_handler : callable, optional
         If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
         translate into nested directory paths) then define a function of the following form:
@@ -134,6 +305,10 @@ def parse_raw_s3_log(
         def asset_id_handler(*, raw_asset_id: str) -> str:
             split_by_slash = raw_asset_id.split("/")
             return split_by_slash[0] + "_" + split_by_slash[-1]
+    tqdm_kwargs : dict, optional
+        Keyword arguments to pass to the tqdm progress bar.
+    maximum_ram_usage_in_bytes : int, default: 1 GB
+        The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
@@ -141,31 +316,14 @@ def parse_raw_s3_log(
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     tqdm_kwargs = tqdm_kwargs or dict()
 
-    # TODO: buffering control
-    # total_file_size_in_bytes = raw_s3_log_file_path.lstat().st_size
-    # buffer_per_job_in_bytes = int(total_memory_in_bytes / number_of_jobs)
-    # Approximate using ~600 bytes per line
-    # number_of_lines_to_read_per_job = int(buffer_per_job_in_bytes / 600)
-    # number_of_iterations_per_job = int(total_file_size_in_bytes / number_of_lines_to_read_per_job)
-
-    # TODO: finish polishing parallelization - just a draft for now
-    if number_of_jobs > 1:
-        raise NotImplementedError("Parallelization has not yet been implemented!")
-        # for _ in range(5)
-        #     reduced_logs = _get_reduced_logs(
-        #         raw_s3_log_file_path=raw_s3_log_file_path,
-        #         lines_errors_file_path=lines_errors_file_path,
-        #         bucket=bucket,
-        #         request_type=request_type
-        #     )
-    else:
-        reduced_logs = _get_reduced_log_lines(
-            raw_s3_log_file_path=raw_s3_log_file_path,
-            bucket=bucket,
-            request_type=request_type,
-            excluded_ips=excluded_ips,
-            tqdm_kwargs=tqdm_kwargs,
-        )
+    reduced_logs = _get_reduced_log_lines(
+        raw_s3_log_file_path=raw_s3_log_file_path,
+        bucket=bucket,
+        request_type=request_type,
+        excluded_ips=excluded_ips,
+        tqdm_kwargs=tqdm_kwargs,
+        maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+    )
 
     reduced_logs_binned_by_unparsed_asset = dict()
     for reduced_log in reduced_logs:
@@ -201,150 +359,69 @@ def parse_raw_s3_log(
     with open(file=progress_file_path, mode="a") as io:
         io.write(f"Parsed {raw_s3_log_file_path} successfully!\n")
 
+    return None
 
-def parse_dandi_raw_s3_log(
+
+def _get_reduced_log_lines(
     *,
-    raw_s3_log_file_path: str | pathlib.Path,
-    parsed_s3_log_folder_path: str | pathlib.Path,
-    mode: Literal["w", "a"] = "a",
-    excluded_ips: collections.defaultdict[str, bool] | None = None,
-    exclude_github_ips: bool = True,
-    asset_id_handler: Callable | None = None,
+    raw_s3_log_file_path: pathlib.Path,
+    bucket: str | None,
+    request_type: Literal["GET", "PUT"],
+    excluded_ips: collections.defaultdict[str, bool],
     tqdm_kwargs: dict | None = None,
-) -> None:
+    maximum_ram_usage_in_bytes: int = 10**9,
+) -> list[ReducedLogLine]:
     """
-    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
-
-    'Parsing' here means:
-      - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
-      - reducing the information to the asset ID, request time, request size, and geographic IP of the requester
+    Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
 
     Parameters
     ----------
-    raw_s3_log_file_path : string or pathlib.Path
+    raw_s3_log_file_path : str or pathlib.Path
         Path to the raw S3 log file.
-    parsed_s3_log_folder_path : string or pathlib.Path
-        The path to write each parsed S3 log file to.
-        There will be one file per handled asset ID.
-    mode : "w" or "a", default: "a"
-        How to resolve the case when files already exist in the folder containing parsed logs.
-        "w" will overwrite existing content, "a" will append or create if the file does not yet exist.
-
-        The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
-        over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-        HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
-    excluded_ips : collections.defaultdict of strings to booleans, optional
+    bucket : str
+        Only parse and return lines that match this bucket.
+    request_type : str
+        The type of request to filter for.
+    excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    exclude_github_ips : bool, default: True
-        Include all GitHub action IP addresses in the `excluded_ips`.
-    asset_id_handler : callable, optional
-        If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
-        translate into nested directory paths) then define a function of the following form:
-
-        # For example
-        def asset_id_handler(*, raw_asset_id: str) -> str:
-            split_by_slash = raw_asset_id.split("/")
-            return split_by_slash[0] + "_" + split_by_slash[-1]
+    tqdm_kwargs : dict, optional
+        Keyword arguments to pass to the tqdm progress bar.
+    maximum_ram_usage_in_bytes : int, default: 1 GB
+        The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
+    assert raw_s3_log_file_path.suffix == ".log", f"{raw_s3_log_file_path=} should end in '.log'!"
+
+    # Collapse bucket to empty string instead of asking if it is None on each iteration
+    bucket = "" if bucket is None else bucket
     tqdm_kwargs = tqdm_kwargs or dict()
 
-    bucket = "dandiarchive"
-    request_type = "GET"
+    # One-time initialization/read of IP address to region cache for performance
+    # This dictionary is intended to be mutated throughout the process
+    ip_address_to_region = _load_ip_address_to_region_cache()
 
-    # Form a lookup for IP addresses to exclude; much faster than asking 'if in' a list on each iteration
-    # Exclude GitHub actions, which are responsible for running health checks on archive which bloat the logs
-    excluded_ips = excluded_ips or collections.defaultdict(bool)
-    if exclude_github_ips:
-        for github_ip in _get_latest_github_ip_ranges():
-            excluded_ips[github_ip] = True
+    # Perform I/O read in batches to improve performance
+    resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=1.0)
+    resolved_tqdm_kwargs.update(tqdm_kwargs)
 
-    if asset_id_handler is None:
-
-        def asset_id_handler(*, raw_asset_id: str) -> str:
-            split_by_slash = raw_asset_id.split("/")
-            return split_by_slash[0] + "_" + split_by_slash[-1]
-
-    return parse_raw_s3_log(
-        raw_s3_log_file_path=raw_s3_log_file_path,
-        parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        mode=mode,
-        bucket=bucket,
-        request_type=request_type,
-        excluded_ips=excluded_ips,
-        asset_id_handler=asset_id_handler,
-        tqdm_kwargs=tqdm_kwargs,
+    reduced_log_lines = list()
+    per_buffer_index = 0
+    buffered_text_reader = BufferedTextReader(
+        file_path=raw_s3_log_file_path, maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes
     )
+    for buffered_raw_lines in tqdm.tqdm(iterable=buffered_text_reader, **resolved_tqdm_kwargs):
+        for index, raw_line in enumerate(iterable=buffered_raw_lines, start=per_buffer_index):
+            _append_reduced_log_line(
+                raw_line=raw_line,
+                reduced_log_lines=reduced_log_lines,
+                bucket=bucket,
+                request_type=request_type,
+                excluded_ips=excluded_ips,
+                log_file_path=raw_s3_log_file_path,
+                index=index,
+                ip_hash_to_region=ip_address_to_region,
+            )
+        per_buffer_index += index
 
+    _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
 
-def parse_all_dandi_raw_s3_logs(
-    *,
-    base_raw_s3_log_folder_path: str | pathlib.Path,
-    parsed_s3_log_folder_path: str | pathlib.Path,
-    mode: Literal["w", "a"] = "a",
-    excluded_ips: collections.defaultdict[str, bool] | None = None,
-    exclude_github_ips: bool = True,
-) -> None:
-    """
-    Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
-
-    Assumes the following folder structure...
-
-    |- <base_raw_s3_log_folder_path>
-    |-- 2019 (year)
-    |--- 01 (month)
-    |---- 01.log (day)
-    | ...
-
-    Parameters
-    ----------
-    base_raw_s3_log_folder_path : string or pathlib.Path
-        Path to the folder containing the raw S3 log files.
-    parsed_s3_log_folder_path : string or pathlib.Path
-        Path to write each parsed S3 log file to.
-        There will be one file per handled asset ID.
-    mode : "w" or "a", default: "a"
-        How to resolve the case when files already exist in the folder containing parsed logs.
-        "w" will overwrite existing content, "a" will append or create if the file does not yet exist.
-    excluded_ips : collections.defaultdict of strings to booleans, optional
-        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    exclude_github_ips : bool, default: True
-        Include all GitHub action IP addresses in the `excluded_ips`.
-    """
-    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
-    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    parsed_s3_log_folder_path.mkdir(exist_ok=True)
-
-    # Re-define some top-level pass-through items here to avoid repeated constructions
-    excluded_ips = excluded_ips or collections.defaultdict(bool)
-    if exclude_github_ips:
-        for github_ip in _get_latest_github_ip_ranges():
-            excluded_ips[github_ip] = True
-
-    def asset_id_handler(*, raw_asset_id: str) -> str:
-        split_by_slash = raw_asset_id.split("/")
-        return split_by_slash[0] + "_" + split_by_slash[-1]
-
-    daily_raw_s3_log_file_paths = list()
-    base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if path.stem.startswith("20")]
-    yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
-    for yearly_folder_path in yearly_folder_paths:
-        monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
-
-        for monthly_folder_path in monthly_folder_paths:
-            daily_raw_s3_log_file_paths.extend(natsort.natsorted(seq=list(monthly_folder_path.glob("*.log"))))
-
-    for raw_s3_log_file_path in tqdm.tqdm(
-        iterable=daily_raw_s3_log_file_paths,
-        desc="Parsing log files...",
-        position=0,
-        leave=True,
-    ):
-        parse_dandi_raw_s3_log(
-            raw_s3_log_file_path=raw_s3_log_file_path,
-            parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-            mode=mode,
-            excluded_ips=excluded_ips,
-            exclude_github_ips=False,  # Already included in list so avoid repeated construction
-            asset_id_handler=asset_id_handler,
-            tqdm_kwargs=dict(position=1, leave=False),
-        )
+    return reduced_log_lines
