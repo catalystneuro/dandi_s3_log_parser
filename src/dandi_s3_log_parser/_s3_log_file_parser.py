@@ -30,7 +30,7 @@ def parse_all_dandi_raw_s3_logs(
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
     number_of_jobs: int = 1,
-    maximum_ram_usage_in_bytes: int = 40**9,
+    maximum_ram_usage_in_bytes: int = 10**9,
 ) -> None:
     """
     Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
