@@ -30,7 +30,7 @@ def parse_all_dandi_raw_s3_logs(
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
     number_of_jobs: int = 1,
-    maximum_ram_usage_in_bytes: int = 10**9,
+    maximum_ram_usage_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
     Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
@@ -62,8 +62,8 @@ def parse_all_dandi_raw_s3_logs(
         Allows negative range to mean 'all but this many (minus one) jobs'.
         E.g., -1 means use all workers, -2 means all but one worker.
         WARNING: planned but not yet supported.
-    maximum_ram_usage_in_bytes : int, default: 1 GB
-        The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
+    maximum_ram_usage_in_bytes : int, default: 4 GB
+        The theoretical maximum amount of RAM (in bytes) to be used across all the processes.
     """
     base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
@@ -116,6 +116,8 @@ def parse_all_dandi_raw_s3_logs(
             per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
             per_job_temporary_folder_path.mkdir(exist_ok=True)
 
+        maximum_ram_usage_in_bytes_per_job = maximum_ram_usage_in_bytes // number_of_jobs
+
         futures = []
         with ProcessPoolExecutor(max_workers=number_of_jobs) as executor:
             for raw_s3_log_file_path in daily_raw_s3_log_file_paths:
@@ -129,7 +131,7 @@ def parse_all_dandi_raw_s3_logs(
                         excluded_ips=excluded_ips,
                         exclude_github_ips=False,  # Already included in list so avoid repeated construction
                         asset_id_handler=asset_id_handler,
-                        maximum_ram_usage_in_bytes=int(maximum_ram_usage_in_bytes / number_of_jobs),
+                        maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes_per_job,
                     )
                 )
 
@@ -187,7 +189,7 @@ def parse_dandi_raw_s3_log(
     exclude_github_ips: bool = True,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
-    maximum_ram_usage_in_bytes: int = 40**9,
+    maximum_ram_usage_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -224,7 +226,7 @@ def parse_dandi_raw_s3_log(
             return split_by_slash[0] + "_" + split_by_slash[-1]
     tqdm_kwargs : dict, optional
         Keyword arguments to pass to the tqdm progress bar.
-    maximum_ram_usage_in_bytes : int, default: 1 GB
+    maximum_ram_usage_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
     tqdm_kwargs = tqdm_kwargs or dict()
@@ -268,7 +270,7 @@ def parse_raw_s3_log(
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
-    maximum_ram_usage_in_bytes: int = 40**9,
+    maximum_ram_usage_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -307,7 +309,7 @@ def parse_raw_s3_log(
             return split_by_slash[0] + "_" + split_by_slash[-1]
     tqdm_kwargs : dict, optional
         Keyword arguments to pass to the tqdm progress bar.
-    maximum_ram_usage_in_bytes : int, default: 1 GB
+    maximum_ram_usage_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
@@ -369,7 +371,7 @@ def _get_reduced_log_lines(
     request_type: Literal["GET", "PUT"],
     excluded_ips: collections.defaultdict[str, bool],
     tqdm_kwargs: dict | None = None,
-    maximum_ram_usage_in_bytes: int = 10**9,
+    maximum_ram_usage_in_bytes: int = 4 * 10**9,
 ) -> list[ReducedLogLine]:
     """
     Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
@@ -386,7 +388,7 @@ def _get_reduced_log_lines(
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     tqdm_kwargs : dict, optional
         Keyword arguments to pass to the tqdm progress bar.
-    maximum_ram_usage_in_bytes : int, default: 1 GB
+    maximum_ram_usage_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
     """
     assert raw_s3_log_file_path.suffix == ".log", f"{raw_s3_log_file_path=} should end in '.log'!"
