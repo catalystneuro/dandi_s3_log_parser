@@ -4,6 +4,7 @@ import collections
 import datetime
 import pathlib
 import os
+import shutil
 import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Literal
@@ -110,6 +111,11 @@ def parse_all_dandi_raw_s3_logs(
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
         temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
         temporary_base_folder_path.mkdir(exist_ok=True)
+
+        # Clean up any previous tasks that failed to clean themselves up
+        for previous_task_folder_path in temporary_base_folder_path.iterdir():
+            shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
+
         task_id = uuid.uuid4()[:5]
         temporary_folder_path = temporary_base_folder_path / task_id
         temporary_folder_path.mkdir(exist_ok=True)
@@ -178,6 +184,8 @@ def parse_all_dandi_raw_s3_logs(
             unordered_parsed_s3_log_folder_path=merged_temporary_folder_path,
             ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
         )
+
+        shutil.rmtree(path=temporary_folder_path, ignore_errors=True)
 
     return None
 
@@ -442,7 +450,8 @@ def _get_reduced_log_lines(
         file_path=raw_s3_log_file_path, maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes
     )
     for buffered_raw_lines in tqdm.tqdm(iterable=buffered_text_reader, **resolved_tqdm_kwargs):
-        for index, raw_line in enumerate(iterable=buffered_raw_lines, start=per_buffer_index):
+        index = 0
+        for raw_line in buffered_raw_lines:
             _append_reduced_log_line(
                 raw_line=raw_line,
                 reduced_log_lines=reduced_log_lines,
@@ -453,6 +462,7 @@ def _get_reduced_log_lines(
                 index=index,
                 ip_hash_to_region=ip_address_to_region,
             )
+            index += 1
         per_buffer_index += index
 
     _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
