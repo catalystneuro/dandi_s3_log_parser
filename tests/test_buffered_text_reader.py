@@ -35,9 +35,9 @@ def single_line_text_file_path(tmp_path_factory: pytest.TempPathFactory):
 
 
 def test_buffered_text_reader(large_text_file_path: pathlib.Path):
-    maximum_ram_usage = 10**6  # 1 MB
+    maximum_ram_usage_in_bytes = 10**6  # 1 MB
     buffered_text_reader = dandi_s3_log_parser.BufferedTextReader(
-        file_path=large_text_file_path, maximum_ram_usage=maximum_ram_usage
+        file_path=large_text_file_path, maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes
     )
 
     assert iter(buffered_text_reader) is buffered_text_reader, "BufferedTextReader object is not iterable!"
@@ -55,10 +55,10 @@ def test_buffered_text_reader(large_text_file_path: pathlib.Path):
 
 
 def test_value_error(single_line_text_file_path: pathlib.Path):
-    maximum_ram_usage = 10**6  # 1 MB
+    maximum_ram_usage_in_bytes = 10**6  # 1 MB
     with pytest.raises(ValueError) as error_info:
         buffered_text_reader = dandi_s3_log_parser.BufferedTextReader(
-            file_path=single_line_text_file_path, maximum_ram_usage=maximum_ram_usage
+            file_path=single_line_text_file_path, maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes
         )
         next(buffered_text_reader)
 

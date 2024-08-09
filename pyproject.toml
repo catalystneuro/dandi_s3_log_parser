@@ -26,6 +26,7 @@ dependencies = [
     "PyYAML",
     "click",
     "natsort",
+    "dandi",
 ]
 classifiers = [
     "Programming Language :: Python",
