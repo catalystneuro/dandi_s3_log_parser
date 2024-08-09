@@ -166,18 +166,18 @@ def parse_all_dandi_raw_s3_logs(
             position=0,
             leave=True,
         ):
-            parsed_s3_log_file_paths = list(per_job_temporary_folder_path.iterdir())
-            for parsed_s3_log_file_path in tqdm.tqdm(
-                iterable=parsed_s3_log_file_paths,
+            per_job_parsed_s3_log_file_paths = list(per_job_temporary_folder_path.iterdir())
+            for per_job_parsed_s3_log_file_path in tqdm.tqdm(
+                iterable=per_job_parsed_s3_log_file_paths,
                 desc="Merging results per job...",
-                total=len(parsed_s3_log_file_paths),
+                total=len(per_job_parsed_s3_log_file_paths),
                 position=1,
                 leave=False,
                 mininterval=1.0,
             ):
-                merged_temporary_file_path = merged_temporary_folder_path / parsed_s3_log_file_path.name
+                merged_temporary_file_path = merged_temporary_folder_path / per_job_parsed_s3_log_file_path.name
 
-                parsed_s3_log = pandas.read_table(filepath_or_buffer=parsed_s3_log_file_path, index_col=0)
+                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path, index_col=0)
                 parsed_s3_log.to_csv(path_or_buf=merged_temporary_file_path, mode="a", sep="\t")
 
         order_parsed_logs(
