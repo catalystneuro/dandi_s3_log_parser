@@ -2,7 +2,7 @@ import pathlib
 
 
 class BufferedTextReader:
-    def __init__(self, *, file_path: str | pathlib.Path, maximum_ram_usage: int = 10**9):
+    def __init__(self, *, file_path: str | pathlib.Path, maximum_ram_usage_in_bytes: int = 10**9):
         """
         Lazily read a text file into RAM using buffers of a specified size.
 
@@ -10,15 +10,15 @@ class BufferedTextReader:
         ----------
         file_path : string or pathlib.Path
             The path to the text file to be read.
-        maximum_ram_usage : int, default: 1 GB
-            The theoretical maximum amount of RAM to be used by the BufferedTextReader object.
+        maximum_ram_usage_in_bytes : int, default: 1 GB
+            The theoretical maximum amount of RAM (in bytes) to be used by the BufferedTextReader object.
         """
         self.file_path = file_path
-        self.maximum_ram_usage = maximum_ram_usage
+        self.maximum_ram_usage_in_bytes = maximum_ram_usage_in_bytes
 
         # The actual amount of bytes to read per iteration is 3x less than theoretical maximum usage
         # due to decoding and handling
-        self.buffer_size_in_bytes = int(maximum_ram_usage / 3)
+        self.buffer_size_in_bytes = int(maximum_ram_usage_in_bytes / 3)
 
         self.total_file_size = pathlib.Path(file_path).stat().st_size
         self.offset = 0
