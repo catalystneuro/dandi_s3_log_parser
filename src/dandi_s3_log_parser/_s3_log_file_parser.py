@@ -5,9 +5,11 @@ import datetime
 import pathlib
 import os
 import shutil
+import traceback
 import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Literal
+import importlib.metadata
 
 import pandas
 import tqdm
@@ -130,21 +132,19 @@ def parse_all_dandi_raw_s3_logs(
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         temporary_folder_path=temporary_folder_path,
                         excluded_ips=excluded_ips,
-                        exclude_github_ips=False,  # Already included in list so avoid repeated construction
-                        asset_id_handler=asset_id_handler,
                         maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes_per_job,
                     )
                 )
 
-            # Perform the iteration to trigger processing
-            for _ in tqdm.tqdm(
+            progress_bar_iterable = tqdm.tqdm(
                 iterable=as_completed(futures),
                 desc=f"Parsing log files using {number_of_jobs} jobs...",
                 total=len(daily_raw_s3_log_file_paths),
                 position=0,
                 leave=True,
-            ):
-                pass
+            )
+            for future in progress_bar_iterable:
+                future.result()  # This is the call that finally triggers the deployment to the workers
 
         print("\n\nParallel parsing complete!\n\n")
 
@@ -156,6 +156,8 @@ def parse_all_dandi_raw_s3_logs(
             leave=True,
         ):
             per_job_parsed_s3_log_file_paths = list(per_job_temporary_folder_path.iterdir())
+            assert len(per_job_parsed_s3_log_file_paths) != 0, f"No files found in {per_job_temporary_folder_path}!"
+
             for per_job_parsed_s3_log_file_path in tqdm.tqdm(
                 iterable=per_job_parsed_s3_log_file_paths,
                 desc="Merging results per job...",
@@ -192,25 +194,51 @@ def _multi_job_parse_dandi_raw_s3_log(
     raw_s3_log_file_path: pathlib.Path,
     temporary_folder_path: pathlib.Path,
     excluded_ips: collections.defaultdict[str, bool] | None,
-    exclude_github_ips: bool,
-    asset_id_handler: Callable | None,
     maximum_ram_usage_in_bytes: int,
 ) -> None:
-    """A mostly pass-through function to calculate the job index on the worker and target the correct subfolder."""
-    job_index = os.getpid() % number_of_jobs
-    per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+    """
+    A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
 
-    parse_dandi_raw_s3_log(
-        raw_s3_log_file_path=raw_s3_log_file_path,
-        parsed_s3_log_folder_path=per_job_temporary_folder_path,
-        mode="a",
-        excluded_ips=excluded_ips,
-        exclude_github_ips=exclude_github_ips,
-        asset_id_handler=asset_id_handler,
-        tqdm_kwargs=dict(position=job_index + 1, leave=False),
-        maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
-        order_results=False,  # Always disable this for parallel processing
-    )
+    Also dumps error stack (which is only typically seen by the worker and not sent back to the main stdout pipe)
+    to a log file.
+    """
+
+    try:
+        error_message = ""
+
+        def asset_id_handler(*, raw_asset_id: str) -> str:
+            """Apparently callables, even simple built-in ones, cannot be pickled."""
+            split_by_slash = raw_asset_id.split("/")
+            return split_by_slash[0] + "_" + split_by_slash[-1]
+
+        job_index = os.getpid() % number_of_jobs
+        per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+
+        # Define error catching stuff as part of the try clause
+        # so that if there is a problem within that, it too is caught
+        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+        errors_folder_path.mkdir(exist_ok=True)
+
+        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
+        date = datetime.datetime.now().strftime("%y%m%d")
+        parallel_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_parallel_errors.txt"
+        error_message += f"Job index {job_index}/{number_of_jobs} parsing {raw_s3_log_file_path} failed due to\n\n"
+
+        parse_dandi_raw_s3_log(
+            raw_s3_log_file_path=raw_s3_log_file_path,
+            parsed_s3_log_folder_path=per_job_temporary_folder_path,
+            mode="a",
+            excluded_ips=excluded_ips,
+            exclude_github_ips=False,  # Already included in list so avoid repeated construction
+            asset_id_handler=asset_id_handler,
+            tqdm_kwargs=dict(position=job_index + 1, leave=False),
+            maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+            order_results=False,  # Always disable this for parallel processing
+        )
+    except Exception as exception:
+        with open(file=parallel_errors_file_path, mode="a") as io:
+            error_message += f"{type(exception)}: {str(exception)}\n\n{traceback.format_exc()}\n\n"
+            io.write(error_message)
 
     return None
 
@@ -418,15 +446,6 @@ def parse_raw_s3_log(
 
         header = False if parsed_s3_log_file_path.exists() is True and mode == "a" else True
         data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
-
-    # Keep a log of progress
-    progress_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "progress"
-    progress_folder_path.mkdir(exist_ok=True)
-
-    date = datetime.datetime.now().strftime("%y%m%d")
-    progress_file_path = progress_folder_path / f"{date}.txt"
-    with open(file=progress_file_path, mode="a") as io:
-        io.write(f"Parsed {raw_s3_log_file_path} successfully!\n")
 
     if order_results is True:
         order_parsed_logs(

@@ -1,6 +1,7 @@
 """Call the raw S3 log parser from the command line."""
 
 import collections
+import os
 import pathlib
 import click
 from typing import Literal
@@ -8,6 +9,8 @@ from typing import Literal
 from ._s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
 from .testing._helpers import find_random_example_line
 from ._config import REQUEST_TYPES
+
+NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
 
 
 @click.command(name="parse_all_dandi_raw_s3_logs")
@@ -45,12 +48,24 @@ HINT: If this iteration is done in chronological order, the resulting parsed log
     type=str,
     default=None,
 )
+@click.option(
+    "--number_of_jobs",
+    help="The number of jobs to use for parallel processing.",
+    required=False,
+    type=int,
+    default=1,
+)
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
     parsed_s3_log_folder_path: str,
     mode: Literal["w", "a"] = "a",
     excluded_ips: str | None = None,
+    number_of_jobs: int = 1,
 ) -> None:
+    number_of_jobs = NUMBER_OF_CPU + number_of_jobs + 1 if number_of_jobs < 0 else number_of_jobs
+    assert number_of_jobs > 0, "The number of jobs must be greater than 0."
+    assert number_of_jobs <= NUMBER_OF_CPU, "The number of jobs must be less than or equal to the number of CPUs."
+
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
@@ -61,6 +76,7 @@ def parse_all_dandi_raw_s3_logs_cli(
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
         mode=mode,
         excluded_ips=handled_excluded_ips,
+        number_of_jobs=number_of_jobs,
     )
 
 
