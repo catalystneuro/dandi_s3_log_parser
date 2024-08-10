@@ -18,7 +18,7 @@ import collections
 import datetime
 import pathlib
 import re
-from importlib.metadata import version as importlib_version
+import importlib.metadata
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import _get_region_from_ip_address
@@ -104,12 +104,12 @@ def _get_full_log_line(
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
-        dandi_s3_log_parser_version = importlib_version(distribution_name="dandi_s3_log_parser")
+        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
 
         with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(f"Line {index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}")
+            io.write(f"Line {index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
 
     return full_log_line
 

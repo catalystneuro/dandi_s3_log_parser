@@ -49,14 +49,14 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
 
 
-def parse_all_dandi_raw_s3_logs_example_0(tmpdir: py.path.local):
+def test_parse_all_dandi_raw_s3_logs_example_0(tmpdir: py.path.local):
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "ordered_example_0"
+    examples_folder_path = file_parent / "examples" / "ordered_example_1"
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
-    test_parsed_s3_log_folder_path = tmpdir / "parsed_example_0"
+    test_parsed_s3_log_folder_path = tmpdir / "parsed_example_1"
     dandi_s3_log_parser.parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=examples_folder_path,
         parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
@@ -86,14 +86,14 @@ def parse_all_dandi_raw_s3_logs_example_0(tmpdir: py.path.local):
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
 
 
-def parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local):
+def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local):
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "ordered_example_0"
+    examples_folder_path = file_parent / "examples" / "ordered_example_1"
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
-    test_parsed_s3_log_folder_path = tmpdir / "parsed_example_0"
+    test_parsed_s3_log_folder_path = tmpdir / "parsed_example_1"
     dandi_s3_log_parser.parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=examples_folder_path,
         parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,

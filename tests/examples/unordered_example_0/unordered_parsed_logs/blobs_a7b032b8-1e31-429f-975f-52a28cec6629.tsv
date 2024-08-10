@@ -1,5 +1,5 @@
-	timestamp	bytes_sent	region
-0	2022-08-05 05:06:35	2141	CH/BeiJing
-1	2022-03-21 05:06:35	24323	MX/Zacatecas
-2	2019-11-13 05:06:35	4332423 US/Colorado
-3	2020-04-16 05:06:35	12313153    unknown
+timestamp	bytes_sent	region
+2022-08-05 05:06:35	2141	CH/BeiJing
+2022-03-21 05:06:35	24323	MX/Zacatecas
+2019-11-13 05:06:35	4332423 US/Colorado
+2020-04-16 05:06:35	12313153    unknown
