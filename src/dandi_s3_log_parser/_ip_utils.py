@@ -65,7 +65,7 @@ def _save_ip_address_to_region_cache(ip_hash_to_region: dict[str, str]) -> None:
         yaml.dump(data=ip_hash_to_region, stream=stream)
 
 
-def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: str) -> str:
+def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: str) -> str | None:
     """
     If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
@@ -99,6 +99,9 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
         ip_hash_to_region[ip_hash] = region_string
 
         return region_string
+    except ipinfo.exceptions.RequestQuotaExceededError:
+        # Return the generic 'unknown' but do not cache
+        return "unknown"
     except Exception as exception:
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)

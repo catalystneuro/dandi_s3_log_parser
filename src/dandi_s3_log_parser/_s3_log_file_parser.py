@@ -11,7 +11,6 @@ from typing import Callable, Literal
 
 import pandas
 import tqdm
-import natsort
 
 from ._ip_utils import (
     _get_latest_github_ip_ranges,
@@ -28,7 +27,6 @@ def parse_all_dandi_raw_s3_logs(
     *,
     base_raw_s3_log_folder_path: str | pathlib.Path,
     parsed_s3_log_folder_path: str | pathlib.Path,
-    mode: Literal["w", "a"] = "a",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
     number_of_jobs: int = 1,
@@ -52,9 +50,6 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path : string or pathlib.Path
         Path to write each parsed S3 log file to.
         There will be one file per handled asset ID.
-    mode : "w" or "a", default: "a"
-        How to resolve the case when files already exist in the folder containing parsed logs.
-        "w" will overwrite existing content, "a" will append or create if the file does not yet exist.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     exclude_github_ips : bool, default: True
@@ -71,6 +66,21 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
     parsed_s3_log_folder_path.mkdir(exist_ok=True)
 
+    # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
+    temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
+    temporary_base_folder_path.mkdir(exist_ok=True)
+
+    # Clean up any previous tasks that failed to clean themselves up
+    for previous_task_folder_path in temporary_base_folder_path.iterdir():
+        shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
+
+    task_id = str(uuid.uuid4())[:5]
+    temporary_folder_path = temporary_base_folder_path / task_id
+    temporary_folder_path.mkdir(exist_ok=True)
+
+    temporary_output_folder_path = temporary_folder_path / "output"
+    temporary_output_folder_path.mkdir(exist_ok=True)
+
     # Re-define some top-level pass-through items here to avoid repeated constructions
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     if exclude_github_ips:
@@ -81,14 +91,7 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    daily_raw_s3_log_file_paths = list()
-    base_folder_paths = [path for path in base_raw_s3_log_folder_path.iterdir() if path.stem.startswith("20")]
-    yearly_folder_paths = natsort.natsorted(seq=list(base_folder_paths))
-    for yearly_folder_path in yearly_folder_paths:
-        monthly_folder_paths = natsort.natsorted(seq=list(yearly_folder_path.iterdir()))
-
-        for monthly_folder_path in monthly_folder_paths:
-            daily_raw_s3_log_file_paths.extend(natsort.natsorted(seq=list(monthly_folder_path.glob("*.log"))))
+    daily_raw_s3_log_file_paths = list(base_raw_s3_log_folder_path.rglob(pattern="*.log"))
 
     if number_of_jobs == 1:
         for raw_s3_log_file_path in tqdm.tqdm(
@@ -99,26 +102,16 @@ def parse_all_dandi_raw_s3_logs(
         ):
             parse_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
-                parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-                mode=mode,
+                parsed_s3_log_folder_path=temporary_output_folder_path,
+                mode="a",
                 excluded_ips=excluded_ips,
                 exclude_github_ips=False,  # Already included in list so avoid repeated construction
                 asset_id_handler=asset_id_handler,
                 tqdm_kwargs=dict(position=1, leave=False),
                 maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+                order_results=False,  # Will immediately reorder all files at the end
             )
     else:
-        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
-        temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
-        temporary_base_folder_path.mkdir(exist_ok=True)
-
-        # Clean up any previous tasks that failed to clean themselves up
-        for previous_task_folder_path in temporary_base_folder_path.iterdir():
-            shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
-
-        task_id = uuid.uuid4()[:5]
-        temporary_folder_path = temporary_base_folder_path / task_id
-        temporary_folder_path.mkdir(exist_ok=True)
         per_job_temporary_folder_paths = list()
         for job_index in range(number_of_jobs):
             per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
@@ -136,7 +129,6 @@ def parse_all_dandi_raw_s3_logs(
                         number_of_jobs=number_of_jobs,
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         temporary_folder_path=temporary_folder_path,
-                        mode=mode,
                         excluded_ips=excluded_ips,
                         exclude_github_ips=False,  # Already included in list so avoid repeated construction
                         asset_id_handler=asset_id_handler,
@@ -146,16 +138,13 @@ def parse_all_dandi_raw_s3_logs(
 
             # Perform the iteration to trigger processing
             for _ in tqdm.tqdm(
-                iterable=as_completed(daily_raw_s3_log_file_paths),
+                iterable=as_completed(futures),
                 desc=f"Parsing log files using {number_of_jobs} jobs...",
                 total=len(daily_raw_s3_log_file_paths),
                 position=0,
                 leave=True,
             ):
                 pass
-
-        merged_temporary_folder_path = temporary_folder_path / "merged"
-        merged_temporary_folder_path.mkdir(exist_ok=True)
 
         print("\n\nParallel parsing complete!\n\n")
 
@@ -175,17 +164,24 @@ def parse_all_dandi_raw_s3_logs(
                 leave=False,
                 mininterval=1.0,
             ):
-                merged_temporary_file_path = merged_temporary_folder_path / per_job_parsed_s3_log_file_path.name
+                merged_temporary_file_path = temporary_output_folder_path / per_job_parsed_s3_log_file_path.name
 
-                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path, index_col=0)
-                parsed_s3_log.to_csv(path_or_buf=merged_temporary_file_path, mode="a", sep="\t")
+                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path)
 
-        order_parsed_logs(
-            unordered_parsed_s3_log_folder_path=merged_temporary_folder_path,
-            ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        )
+                header = False if merged_temporary_file_path.exists() else True
+                parsed_s3_log.to_csv(
+                    path_or_buf=merged_temporary_file_path, mode="a", sep="\t", header=header, index=False
+                )
 
-        shutil.rmtree(path=temporary_folder_path, ignore_errors=True)
+    # Always apply this step at the end to be sure we maintained chronological order
+    # (even if you think order of iteration itself was performed chronologically)
+    # This step also adds the index counter to the TSV
+    order_parsed_logs(
+        unordered_parsed_s3_log_folder_path=temporary_output_folder_path,
+        ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+    )
+
+    shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
 
     return None
 
@@ -195,7 +191,6 @@ def _multi_job_parse_dandi_raw_s3_log(
     number_of_jobs: int,
     raw_s3_log_file_path: pathlib.Path,
     temporary_folder_path: pathlib.Path,
-    mode: Literal["w", "a"],
     excluded_ips: collections.defaultdict[str, bool] | None,
     exclude_github_ips: bool,
     asset_id_handler: Callable | None,
@@ -208,12 +203,13 @@ def _multi_job_parse_dandi_raw_s3_log(
     parse_dandi_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         parsed_s3_log_folder_path=per_job_temporary_folder_path,
-        mode=mode,
+        mode="a",
         excluded_ips=excluded_ips,
         exclude_github_ips=exclude_github_ips,
         asset_id_handler=asset_id_handler,
         tqdm_kwargs=dict(position=job_index + 1, leave=False),
         maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+        order_results=False,  # Always disable this for parallel processing
     )
 
     return None
@@ -229,6 +225,7 @@ def parse_dandi_raw_s3_log(
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
     maximum_ram_usage_in_bytes: int = 4 * 10**9,
+    order_results: bool = True,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -267,6 +264,10 @@ def parse_dandi_raw_s3_log(
         Keyword arguments to pass to the tqdm progress bar.
     maximum_ram_usage_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
+    order_results : bool, default: True
+        Whether to order the results chronologically.
+        This is strongly suggested, but a common case of disabling it is if ordering is intended to be applied after
+        multiple steps of processing instead of during this operation.
     """
     tqdm_kwargs = tqdm_kwargs or dict()
 
@@ -286,7 +287,7 @@ def parse_dandi_raw_s3_log(
             split_by_slash = raw_asset_id.split("/")
             return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    return parse_raw_s3_log(
+    parse_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
         mode=mode,
@@ -296,7 +297,10 @@ def parse_dandi_raw_s3_log(
         asset_id_handler=asset_id_handler,
         tqdm_kwargs=tqdm_kwargs,
         maximum_ram_usage_in_bytes=maximum_ram_usage_in_bytes,
+        order_results=order_results,
     )
+
+    return None
 
 
 def parse_raw_s3_log(
@@ -310,6 +314,7 @@ def parse_raw_s3_log(
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
     maximum_ram_usage_in_bytes: int = 4 * 10**9,
+    order_results: bool = True,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -350,12 +355,31 @@ def parse_raw_s3_log(
         Keyword arguments to pass to the tqdm progress bar.
     maximum_ram_usage_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to be used throughout the process.
+    order_results : bool, default: True
+        Whether to order the results chronologically.
+        This is strongly suggested, but a common case of disabling it is if ordering is intended to be applied after
+        multiple steps of processing instead of during this operation.
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
     parsed_s3_log_folder_path.mkdir(exist_ok=True)
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     tqdm_kwargs = tqdm_kwargs or dict()
+
+    if order_results is True:
+        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
+        temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
+        temporary_base_folder_path.mkdir(exist_ok=True)
+
+        # Clean up any previous tasks that failed to clean themselves up
+        for previous_task_folder_path in temporary_base_folder_path.iterdir():
+            shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
+
+        task_id = str(uuid.uuid4())[:5]
+        temporary_folder_path = temporary_base_folder_path / task_id
+        temporary_folder_path.mkdir(exist_ok=True)
+        temporary_output_folder_path = temporary_folder_path / "output"
+        temporary_output_folder_path.mkdir(exist_ok=True)
 
     reduced_logs = _get_reduced_log_lines(
         raw_s3_log_file_path=raw_s3_log_file_path,
@@ -387,11 +411,15 @@ def parse_raw_s3_log(
         reduced_logs_binned_by_asset = reduced_logs_binned_by_unparsed_asset
 
     for raw_asset_id, reduced_logs_per_asset in reduced_logs_binned_by_asset.items():
-        parsed_s3_log_file_path = parsed_s3_log_folder_path / f"{raw_asset_id}.tsv"
+        output_folder_path = temporary_output_folder_path if order_results is True else parsed_s3_log_folder_path
+        parsed_s3_log_file_path = output_folder_path / f"{raw_asset_id}.tsv"
 
         data_frame = pandas.DataFrame(data=reduced_logs_per_asset)
-        data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t")
 
+        header = False if parsed_s3_log_file_path.exists() is True and mode == "a" else True
+        data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
+
+    # Keep a log of progress
     progress_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "progress"
     progress_folder_path.mkdir(exist_ok=True)
 
@@ -399,6 +427,14 @@ def parse_raw_s3_log(
     progress_file_path = progress_folder_path / f"{date}.txt"
     with open(file=progress_file_path, mode="a") as io:
         io.write(f"Parsed {raw_s3_log_file_path} successfully!\n")
+
+    if order_results is True:
+        order_parsed_logs(
+            unordered_parsed_s3_log_folder_path=temporary_output_folder_path,
+            ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+        )
+
+        shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
 
     return None
 

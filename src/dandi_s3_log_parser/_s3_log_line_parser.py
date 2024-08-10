@@ -109,7 +109,7 @@ def _get_full_log_line(
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
 
         with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(f"Line {index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}")
+            io.write(f"Line {index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
 
     return full_log_line
 
