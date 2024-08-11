@@ -71,9 +71,10 @@ The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
     parsed_s3_log_folder_path: str,
-    mode: Literal["w", "a"] = "a",
-    excluded_ips: str | None = None,
-    maximum_number_of_workers: int = 1,
+    mode: Literal["w", "a"],
+    excluded_ips: str | None,
+    maximum_number_of_workers: int,
+    maximum_buffer_size_in_bytes: int,
 ) -> None:
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
@@ -86,6 +87,7 @@ def parse_all_dandi_raw_s3_logs_cli(
         mode=mode,
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
 
 
