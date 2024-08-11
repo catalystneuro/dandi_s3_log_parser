@@ -49,10 +49,10 @@ HINT: If this iteration is done in chronological order, the resulting parsed log
     default=None,
 )
 @click.option(
-    "--number_of_jobs",
-    help="The number of jobs to use for parallel processing.",
+    "--maximum_number_of_workers",
+    help="The maximum number of workers to distribute tasks across.",
     required=False,
-    type=int,
+    type=click.IntRange(1, os.cpu_count()),
     default=1,
 )
 def parse_all_dandi_raw_s3_logs_cli(
@@ -60,12 +60,8 @@ def parse_all_dandi_raw_s3_logs_cli(
     parsed_s3_log_folder_path: str,
     mode: Literal["w", "a"] = "a",
     excluded_ips: str | None = None,
-    number_of_jobs: int = 1,
+    maximum_number_of_workers: int = 1,
 ) -> None:
-    number_of_jobs = NUMBER_OF_CPU + number_of_jobs + 1 if number_of_jobs < 0 else number_of_jobs
-    assert number_of_jobs > 0, "The number of jobs must be greater than 0."
-    assert number_of_jobs <= NUMBER_OF_CPU, "The number of jobs must be less than or equal to the number of CPUs."
-
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
@@ -76,12 +72,12 @@ def parse_all_dandi_raw_s3_logs_cli(
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
         mode=mode,
         excluded_ips=handled_excluded_ips,
-        number_of_jobs=number_of_jobs,
+        maximum_number_of_workers=maximum_number_of_workers,
     )
 
 
 # TODO
-@click.command(name="parse_dandi_raw_s3_logs")
+@click.command(name="parse_dandi_raw_s3_log")
 def parse_dandi_raw_s3_log_cli() -> None:
     parse_dandi_raw_s3_log()
 
