@@ -17,13 +17,9 @@ import tqdm
 
 from ._ip_utils import (
     _get_latest_github_ip_ranges,
-    _load_ip_address_to_region_cache,
-    _save_ip_address_to_region_cache,
 )
-from ._s3_log_line_parser import ReducedLogLine, _append_reduced_log_line
 from ._s3_log_file_parser import parse_raw_s3_log
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-from ._buffered_text_reader import BufferedTextReader
 from ._order_parsed_logs import order_parsed_logs
 
 
@@ -34,8 +30,8 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path: str | pathlib.Path,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
-    maximum_number_of_workers:int = Field(ge=1, le=os.cpu_count(), default=1),
-    maximum_buffer_size_in_bytes: int = 4 * 10 ** 9,
+    maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count(), default=1),
+    maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
     Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
@@ -226,7 +222,9 @@ def _multi_job_parse_dandi_raw_s3_log(
         dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
         parallel_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_parallel_errors.txt"
-        error_message += f"Job index {job_index}/{maximum_number_of_workers} parsing {raw_s3_log_file_path} failed due to\n\n"
+        error_message += (
+            f"Job index {job_index}/{maximum_number_of_workers} parsing {raw_s3_log_file_path} failed due to\n\n"
+        )
 
         parse_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
@@ -334,4 +332,3 @@ def parse_dandi_raw_s3_log(
     )
 
     return None
-
