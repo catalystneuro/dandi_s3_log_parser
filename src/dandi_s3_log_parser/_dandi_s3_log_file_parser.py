@@ -93,7 +93,10 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
-    daily_raw_s3_log_file_paths = list(base_raw_s3_log_folder_path.rglob(pattern="*.log"))
+    daily_raw_s3_log_file_paths = set(base_raw_s3_log_folder_path.rglob(pattern="*.log"))
+
+    # Workaround to particular issue with current repo storage structure on Drogon
+    daily_raw_s3_log_file_paths.remove(pathlib.Path("/mnt/backup/dandi/dandiarchive-logs/stats/start-end.log"))
 
     if maximum_number_of_workers == 1:
         for raw_s3_log_file_path in tqdm.tqdm(
@@ -300,6 +303,8 @@ def parse_dandi_raw_s3_log(
         This is strongly suggested, but a common case of disabling it is if ordering is intended to be applied after
         multiple steps of processing instead of during this operation.
     """
+    raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
+    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
     tqdm_kwargs = tqdm_kwargs or dict()
 
     bucket = "dandiarchive"
