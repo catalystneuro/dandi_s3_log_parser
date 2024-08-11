@@ -6,7 +6,7 @@ import pathlib
 import click
 from typing import Literal
 
-from ._s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
+from ._dandi_s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
 from .testing._helpers import find_random_example_line
 from ._config import REQUEST_TYPES
 
@@ -52,8 +52,21 @@ HINT: If this iteration is done in chronological order, the resulting parsed log
     "--maximum_number_of_workers",
     help="The maximum number of workers to distribute tasks across.",
     required=False,
-    type=click.IntRange(1, os.cpu_count()),
+    type=click.IntRange(min=1, max=os.cpu_count()),
     default=1,
+)
+@click.option(
+    "--maximum_buffer_size_in_bytes",
+    help=""""
+The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
+    source text files.
+    Actual total RAM usage will be higher due to overhead and caching.
+    Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
+    greater than one.
+""",
+    required=False,
+    type=click.IntRange(min=10**6),  # Minimum of 1 MB
+    default=4 * 10**9,
 )
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
