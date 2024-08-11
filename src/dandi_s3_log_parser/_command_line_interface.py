@@ -27,21 +27,6 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     type=click.Path(writable=True),
 )
 @click.option(
-    "--mode",
-    help=(
-        """How to resolve the case when files already exist in the folder containing parsed logs.
-"w" will overwrite existing content, "a" will append or create if the file does not yet exist.
-
-The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
-over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
-"""
-    ),
-    required=False,
-    type=click.Choice(["w", "a"]),
-    default="a",
-)
-@click.option(
     "--excluded_ips",
     help="A comma-separated list of IP addresses to exclude from parsing.",
     required=False,
@@ -84,7 +69,6 @@ def parse_all_dandi_raw_s3_logs_cli(
     parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=base_raw_s3_log_folder_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        mode=str(mode),
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
