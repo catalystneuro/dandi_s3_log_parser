@@ -42,7 +42,7 @@ parse_all_dandi_raw_s3_logs \
   --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
   --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_7_13_2024/GET_per_asset_id \
   --excluded_ips < Drogon's IP > \
-  --maximum_number_of_workers 30 \
+  --maximum_number_of_workers 3 \
   --maximum_buffer_size_in_bytes 15000000000
 ```
 
