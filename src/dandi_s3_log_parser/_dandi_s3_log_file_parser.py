@@ -12,7 +12,7 @@ from typing import Callable, Literal
 import importlib.metadata
 
 import pandas
-from pydantic import Field, validate_call
+from pydantic import validate_call
 import tqdm
 
 from ._ip_utils import (
@@ -30,7 +30,8 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path: str | pathlib.Path,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
-    maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count(), default=1),
+    # maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count(), default=1),
+    maximum_number_of_workers: int = 1,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
