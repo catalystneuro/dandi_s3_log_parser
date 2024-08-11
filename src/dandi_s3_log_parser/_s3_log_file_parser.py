@@ -1,21 +1,15 @@
 """Primary functions for parsing raw S3 log file for DANDI."""
 
 import collections
-import datetime
 import pathlib
-import os
 import shutil
-import traceback
 import uuid
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Literal
-import importlib.metadata
 
 import pandas
 import tqdm
 
 from ._ip_utils import (
-    _get_latest_github_ip_ranges,
     _load_ip_address_to_region_cache,
     _save_ip_address_to_region_cache,
 )
