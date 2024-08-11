@@ -72,7 +72,7 @@ def _find_all_possible_substring_indices(*, string: str, substring: str) -> list
     return indices
 
 
-def _attempt_to_remove_bad_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
+def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
     """
     Attempt to remove bad quotes from a raw line of an S3 log file.
 
@@ -112,7 +112,7 @@ def _parse_s3_log_line(*, raw_line: str) -> list[str]:
     if number_of_parsed_items <= 26:
         return parsed_log_line
 
-    potentially_cleaned_raw_line = _attempt_to_remove_bad_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
+    potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
     parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
 
     return parsed_log_line
