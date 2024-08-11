@@ -84,7 +84,7 @@ def parse_all_dandi_raw_s3_logs_cli(
     parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=base_raw_s3_log_folder_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        mode=mode,
+        mode=str(mode),
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
