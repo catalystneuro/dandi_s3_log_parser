@@ -56,7 +56,6 @@ The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
     parsed_s3_log_folder_path: str,
-    mode: Literal["w", "a"],
     excluded_ips: str | None,
     maximum_number_of_workers: int,
     maximum_buffer_size_in_bytes: int,
