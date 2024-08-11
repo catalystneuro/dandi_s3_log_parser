@@ -21,6 +21,7 @@ from ._ip_utils import (
 from ._s3_log_file_parser import parse_raw_s3_log
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._order_parsed_logs import order_parsed_logs
+from ._ip_utils import _load_ip_address_to_region_cache, _save_ip_address_to_region_cache, _IP_HASH_TO_REGION_FILE_PATH
 
 
 @validate_call
@@ -117,11 +118,19 @@ def parse_all_dandi_raw_s3_logs(
                 order_results=False,  # Will immediately reorder all files at the end
             )
     else:
+        ip_hash_to_region = _load_ip_address_to_region_cache()
+
         per_job_temporary_folder_paths = list()
         for job_index in range(maximum_number_of_workers):
             per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
             per_job_temporary_folder_path.mkdir(exist_ok=True)
             per_job_temporary_folder_paths.append(per_job_temporary_folder_path)
+
+            # Must have one cache copy per job to avoid race conditions
+            ip_hash_to_region_file_path = per_job_temporary_folder_path / "ip_hash_to_region.yaml"
+            _save_ip_address_to_region_cache(
+                ip_hash_to_region=ip_hash_to_region, ip_hash_to_region_file_path=ip_hash_to_region_file_path
+            )
 
         maximum_buffer_size_in_bytes_per_job = maximum_buffer_size_in_bytes // maximum_number_of_workers
 
@@ -150,6 +159,19 @@ def parse_all_dandi_raw_s3_logs(
                 future.result()  # This is the call that finally triggers the deployment to the workers
 
         print("\n\nParallel parsing complete!\n\n")
+
+        # Merge IP cache files
+        for job_index in range(maximum_number_of_workers):
+            per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+            ip_hash_to_region_file_path = per_job_temporary_folder_path / "ip_hash_to_region.yaml"
+
+            new_ip_hash_to_region = _load_ip_address_to_region_cache(
+                ip_hash_to_region_file_path=ip_hash_to_region_file_path
+            )
+            ip_hash_to_region.update(new_ip_hash_to_region)
+        _save_ip_address_to_region_cache(
+            ip_hash_to_region=ip_hash_to_region, ip_hash_to_region_file_path=_IP_HASH_TO_REGION_FILE_PATH
+        )
 
         for per_job_temporary_folder_path in tqdm.tqdm(
             iterable=per_job_temporary_folder_paths,
@@ -216,6 +238,7 @@ def _multi_job_parse_dandi_raw_s3_log(
 
         job_index = os.getpid() % maximum_number_of_workers
         per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+        ip_hash_to_region_file_path = per_job_temporary_folder_path / "ip_hash_to_region.yaml"
 
         # Define error catching stuff as part of the try clause
         # so that if there is a problem within that, it too is caught
@@ -239,6 +262,7 @@ def _multi_job_parse_dandi_raw_s3_log(
             tqdm_kwargs=dict(position=job_index + 1, leave=False),
             maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
             order_results=False,  # Always disable this for parallel processing
+            ip_hash_to_region_file_path=ip_hash_to_region_file_path,
         )
     except Exception as exception:
         with open(file=parallel_errors_file_path, mode="a") as io:
@@ -259,6 +283,7 @@ def parse_dandi_raw_s3_log(
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
+    ip_hash_to_region_file_path: str | pathlib.Path | None = None,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -334,6 +359,7 @@ def parse_dandi_raw_s3_log(
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         order_results=order_results,
+        ip_hash_to_region_file_path=ip_hash_to_region_file_path,
     )
 
     return None

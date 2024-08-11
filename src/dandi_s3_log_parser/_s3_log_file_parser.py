@@ -31,6 +31,7 @@ def parse_raw_s3_log(
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
+    ip_hash_to_region_file_path: str | pathlib.Path | None = None,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -105,6 +106,7 @@ def parse_raw_s3_log(
         excluded_ips=excluded_ips,
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+        ip_hash_to_region_file_path=ip_hash_to_region_file_path,
     )
 
     reduced_logs_binned_by_unparsed_asset = dict()
@@ -155,6 +157,7 @@ def _get_reduced_log_lines(
     excluded_ips: collections.defaultdict[str, bool],
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
+    ip_hash_to_region_file_path: pathlib.Path | None,
 ) -> list[_ReducedLogLine]:
     """
     Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
@@ -183,7 +186,7 @@ def _get_reduced_log_lines(
 
     # One-time initialization/read of IP address to region cache for performance
     # This dictionary is intended to be mutated throughout the process
-    ip_address_to_region = _load_ip_address_to_region_cache()
+    ip_hash_to_region = _load_ip_address_to_region_cache(ip_hash_to_region_file_path=ip_hash_to_region_file_path)
 
     # Perform I/O read in batches to improve performance
     resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=1.0)
@@ -194,7 +197,9 @@ def _get_reduced_log_lines(
     buffered_text_reader = BufferedTextReader(
         file_path=raw_s3_log_file_path, maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes
     )
-    for buffered_raw_lines in tqdm.tqdm(iterable=buffered_text_reader, **resolved_tqdm_kwargs):
+    for buffered_raw_lines in tqdm.tqdm(
+        iterable=buffered_text_reader, total=len(buffered_text_reader), **resolved_tqdm_kwargs
+    ):
         index = 0
         for raw_line in buffered_raw_lines:
             _append_reduced_log_line(
@@ -205,11 +210,11 @@ def _get_reduced_log_lines(
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
                 index=index,
-                ip_hash_to_region=ip_address_to_region,
+                ip_hash_to_region=ip_hash_to_region,
             )
             index += 1
         per_buffer_index += index
 
-    _save_ip_address_to_region_cache(ip_hash_to_region=ip_address_to_region)
+    _save_ip_address_to_region_cache(ip_hash_to_region=ip_hash_to_region)
 
     return reduced_log_lines
