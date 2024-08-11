@@ -97,7 +97,7 @@ def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local):
     dandi_s3_log_parser.parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=examples_folder_path,
         parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
-        number_of_jobs=2,
+        maximum_number_of_workers=2,
     )
     test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
 
