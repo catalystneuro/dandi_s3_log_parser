@@ -14,7 +14,6 @@ from ._ip_utils import (
     _save_ip_address_to_region_cache,
 )
 from ._s3_log_line_parser import _ReducedLogLine, _append_reduced_log_line
-from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._buffered_text_reader import BufferedTextReader
 from ._order_parsed_logs import order_parsed_logs
 
@@ -86,7 +85,7 @@ def parse_raw_s3_log(
 
     if order_results is True:
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
-        temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
+        temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
         temporary_base_folder_path.mkdir(exist_ok=True)
 
         # Clean up any previous tasks that failed to clean themselves up

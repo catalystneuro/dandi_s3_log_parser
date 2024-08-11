@@ -70,7 +70,7 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path.mkdir(exist_ok=True)
 
     # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
-    temporary_base_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "temp"
+    temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
     temporary_base_folder_path.mkdir(exist_ok=True)
 
     # Clean up any previous tasks that failed to clean themselves up
