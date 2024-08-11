@@ -13,7 +13,7 @@ from ._ip_utils import (
     _load_ip_address_to_region_cache,
     _save_ip_address_to_region_cache,
 )
-from ._s3_log_line_parser import ReducedLogLine, _append_reduced_log_line
+from ._s3_log_line_parser import _ReducedLogLine, _append_reduced_log_line
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._buffered_text_reader import BufferedTextReader
 from ._order_parsed_logs import order_parsed_logs
@@ -155,7 +155,7 @@ def _get_reduced_log_lines(
     excluded_ips: collections.defaultdict[str, bool],
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
-) -> list[ReducedLogLine]:
+) -> list[_ReducedLogLine]:
     """
     Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
 

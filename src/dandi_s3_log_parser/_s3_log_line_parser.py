@@ -23,7 +23,7 @@ import importlib.metadata
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import _get_region_from_ip_address
 
-FULL_PATTERN_TO_FIELD_MAPPING = [
+_FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
     "bucket",
     "timestamp",
@@ -50,25 +50,70 @@ FULL_PATTERN_TO_FIELD_MAPPING = [
     "endpoint",
     "tls_version",
     "access_point_arn",
-    "extra",  # TODO: Never figured out what this field is...
 ]
-REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "region"]
+_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "region"]
 
-FullLogLine = collections.namedtuple("FullLogLine", FULL_PATTERN_TO_FIELD_MAPPING)
-ReducedLogLine = collections.namedtuple("ReducedLogLine", REDUCED_PATTERN_TO_FIELD_MAPPING)
+_FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
+_ReducedLogLine = collections.namedtuple("ReducedLogLine", _REDUCED_PATTERN_TO_FIELD_MAPPING)
 
-
-# Original
-# S3_LOG_REGEX = re.compile(r'(?:"([^"]+)")|(?:\[([^\]]+)\])|([^ ]+)')
+_S3_LOG_REGEX = re.compile(pattern=r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
 
 
-# AI corrected...
-S3_LOG_REGEX = re.compile(r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
+def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
+    indices = list()
+    start = 0
+    while True:
+        next_index = string.find(substring, start)
+        if next_index == -1:  # .find(...) was unable to locate the substring
+            break
+        indices.append(next_index)
+        start = next_index + 1
+
+    return indices
+
+
+def _attempt_to_remove_bad_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
+    """
+    Attempt to remove bad quotes from a raw line of an S3 log file.
+
+    These quotes are not properly escaped and are causing issues with the regex pattern.
+    Various attempts to fix the regex failed, so this is the most reliable correction I could find.
+    """
+    starting_quotes_indices = _find_all_possible_substring_indices(string=raw_line, substring=' "')
+    ending_quotes_indices = _find_all_possible_substring_indices(string=raw_line, substring='" ')
+
+    # If even further unexpected structure, just return the bad parsed line so that the error reporter can catch it
+    if len(starting_quotes_indices) == 0:
+        return bad_parsed_line
+    if len(starting_quotes_indices) != len(ending_quotes_indices):
+        return bad_parsed_line
+
+    cleaned_raw_line = raw_line[0 : starting_quotes_indices[0]]
+    for counter in range(1, len(starting_quotes_indices) - 1):
+        next_block = raw_line[ending_quotes_indices[counter - 1] + 2 : starting_quotes_indices[counter]]
+        cleaned_raw_line += " - " + next_block
+    cleaned_raw_line += " - " + raw_line[ending_quotes_indices[-1] + 2 :]
+
+    return cleaned_raw_line
 
 
 def _parse_s3_log_line(*, raw_line: str) -> list[str]:
-    """The current method of parsing lines of an S3 log file."""
-    parsed_log_line = [a or b or c for a, b, c in S3_LOG_REGEX.findall(raw_line)]
+    """
+    The current method of parsing lines of an S3 log file.
+
+    Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
+    as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
+    """
+    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=raw_line)]
+
+    number_of_parsed_items = len(parsed_log_line)
+
+    # Everything worked as expected
+    if number_of_parsed_items <= 26:
+        return parsed_log_line
+
+    potentially_cleaned_raw_line = _attempt_to_remove_bad_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
+    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
 
     return parsed_log_line
 
@@ -79,7 +124,7 @@ def _get_full_log_line(
     log_file_path: pathlib.Path,
     index: int,
     raw_line: str,
-) -> FullLogLine | None:
+) -> _FullLogLine | None:
     """Construct a FullLogLine from a single parsed log line, or dump to error collection file and return None."""
     full_log_line = None
 
@@ -88,15 +133,13 @@ def _get_full_log_line(
         # ARN not detected
         case 24:
             parsed_log_line.append("-")
-            parsed_log_line.append("-")
-            full_log_line = FullLogLine(*parsed_log_line)
-        # Expected form most of the time
+            full_log_line = _FullLogLine(*parsed_log_line)
+        # Expected length for good lines
         case 25:
-            parsed_log_line.append("-")
-            full_log_line = FullLogLine(*parsed_log_line)
-        # Happens for certain types of HEAD requests
+            full_log_line = _FullLogLine(*parsed_log_line)
+        # Happens for certain types of HEAD requests; not sure what the extra element is
         case 26:
-            full_log_line = FullLogLine(*parsed_log_line)
+            full_log_line = _FullLogLine(*parsed_log_line[:25])
 
     # Deviant log entry; usually some very ill-formed content in the URI
     # Dump information to a log file in the base folder for easy sharing
@@ -117,7 +160,7 @@ def _get_full_log_line(
 def _append_reduced_log_line(
     *,
     raw_line: str,
-    reduced_log_lines: list[ReducedLogLine],
+    reduced_log_lines: list[_ReducedLogLine],
     bucket: str,
     request_type: str,
     excluded_ips: collections.defaultdict[str, bool],
@@ -181,7 +224,7 @@ def _append_reduced_log_line(
     parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
     parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
     region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.remote_ip)
-    reduced_log_line = ReducedLogLine(
+    reduced_log_line = _ReducedLogLine(
         asset_id=full_log_line.asset_id,
         timestamp=parsed_timestamp,
         bytes_sent=parsed_bytes_sent,
