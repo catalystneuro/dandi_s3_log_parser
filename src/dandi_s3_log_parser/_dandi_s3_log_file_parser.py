@@ -191,7 +191,7 @@ def parse_all_dandi_raw_s3_logs(
                 total=len(per_job_parsed_s3_log_file_paths),
                 position=1,
                 leave=False,
-                mininterval=1.0,
+                mininterval=3.0,
             ):
                 merged_temporary_file_path = temporary_output_folder_path / per_job_parsed_s3_log_file_path.name
 
@@ -201,6 +201,8 @@ def parse_all_dandi_raw_s3_logs(
                 parsed_s3_log.to_csv(
                     path_or_buf=merged_temporary_file_path, mode="a", sep="\t", header=header, index=False
                 )
+
+            print("\n\n")
 
     # Always apply this step at the end to be sure we maintained chronological order
     # (even if you think order of iteration itself was performed chronologically)
