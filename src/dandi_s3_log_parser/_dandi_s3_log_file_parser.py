@@ -5,6 +5,7 @@ import datetime
 import importlib.metadata
 import os
 import pathlib
+import random
 import shutil
 import traceback
 import uuid
@@ -81,8 +82,9 @@ def parse_all_dandi_raw_s3_logs(
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
 
+    # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     daily_raw_s3_log_file_paths = set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files
-    daily_raw_s3_log_file_paths = list(daily_raw_s3_log_file_paths)[:10]
+    random.shuffle(list(daily_raw_s3_log_file_paths))
 
     if maximum_number_of_workers == 1:
         for raw_s3_log_file_path in tqdm.tqdm(

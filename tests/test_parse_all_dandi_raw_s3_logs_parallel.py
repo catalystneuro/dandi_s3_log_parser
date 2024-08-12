@@ -45,7 +45,6 @@ def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local) -
         )
         expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path, index_col=0)
 
-        # Parallelization might have merged things out of deterministic order based on whichever worker finished first
         test_parsed_s3_log = test_parsed_s3_log.sort_values(by="timestamp")
         expected_parsed_s3_log = expected_parsed_s3_log.sort_values(by="timestamp")
 
