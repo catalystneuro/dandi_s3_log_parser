@@ -1,4 +1,5 @@
-"""Primary functions for parsing a single line of a raw S3 log.
+"""
+Primary functions for parsing a single line of a raw S3 log.
 
 The strategy is to...
 
@@ -20,7 +21,6 @@ import pathlib
 import re
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-from ._ip_utils import _get_region_from_ip_address
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
@@ -72,7 +72,8 @@ def _find_all_possible_substring_indices(*, string: str, substring: str) -> list
 
 
 def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
-    """Attempt to remove bad quotes from a raw line of an S3 log file.
+    """
+    Attempt to remove bad quotes from a raw line of an S3 log file.
 
     These quotes are not properly escaped and are causing issues with the regex pattern.
     Various attempts to fix the regex failed, so this is the most reliable correction I could find.
@@ -96,7 +97,8 @@ def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
 
 
 def _parse_s3_log_line(*, raw_line: str) -> list[str]:
-    """The current method of parsing lines of an S3 log file.
+    """
+    The current method of parsing lines of an S3 log file.
 
     Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
     as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
@@ -163,9 +165,9 @@ def _append_reduced_log_line(
     excluded_ips: collections.defaultdict[str, bool],
     log_file_path: pathlib.Path,
     index: int,
-    ip_hash_to_region: dict[str, str],
 ) -> None:
-    """Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
+    """
+    Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
 
     Parameters
     ----------
@@ -205,8 +207,7 @@ def _append_reduced_log_line(
     if full_log_line.status_code[0] != "2":
         return
 
-    # Derived from command string, e.g., "HEAD /blobs/b38/..."
-    # Subset first 7 characters for performance
+    # Derived from operation string, e.g., "REST.GET.OBJECT"
     parsed_request_type = full_log_line.operation.split(".")[1]
     if parsed_request_type != request_type:
         return
@@ -220,12 +221,11 @@ def _append_reduced_log_line(
 
     parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
     parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
-    region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.ip_address)
     reduced_log_line = _ReducedLogLine(
         asset_id=full_log_line.asset_id,
         timestamp=parsed_timestamp,
         bytes_sent=parsed_bytes_sent,
-        region=region,
+        ip_address=full_log_line.ip_address,
     )
 
     reduced_log_lines.append(reduced_log_line)

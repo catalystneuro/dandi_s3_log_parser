@@ -6,8 +6,9 @@ import py
 import dandi_s3_log_parser
 
 
-def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local):
-    """'ordered_example_2' contains the basic test cases as well as a collection of 'bad lines' contributed over time.
+def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
+    """
+    'ordered_example_2' contains the basic test cases as well as a collection of 'bad lines' contributed over time.
     """
     tmpdir = pathlib.Path(tmpdir)
 
@@ -23,7 +24,8 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local):
 
     test_parsed_s3_log_folder_path = tmpdir / "parsed_example_2"
     dandi_s3_log_parser.parse_dandi_raw_s3_log(
-        raw_s3_log_file_path=example_raw_s3_log_file_path, parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
+        raw_s3_log_file_path=example_raw_s3_log_file_path,
+        parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
     )
     test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
 

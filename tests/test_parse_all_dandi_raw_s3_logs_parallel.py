@@ -6,7 +6,8 @@ import py
 import dandi_s3_log_parser
 
 
-def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local):
+def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local) -> None:
+    """Basic test for parsing of all DANDI raw S3 logs in a directory using multiple workers."""
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent

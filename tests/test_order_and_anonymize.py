@@ -7,6 +7,7 @@ import dandi_s3_log_parser
 
 
 def test_order_and_anonymize(tmpdir: py.path.local) -> None:
+    """Basic test for ordering and anonymizing parsed S3 logs."""
     tmpdir = pathlib.Path(tmpdir)
 
     unordered_example_base_folder_path = pathlib.Path(__file__).parent / "examples" / "order_and_anonymize_example_0"
@@ -25,11 +26,14 @@ def test_order_and_anonymize(tmpdir: py.path.local) -> None:
         expected_ordered_and_anonymized_s3_log_file_path = expected_output_folder_path / parsed_log_file_name
 
         test_ordered_and_anonymized_s3_log = pandas.read_table(
-            filepath_or_buffer=test_ordered_and_anonymized_s3_log_file_path, index_col=0,
+            filepath_or_buffer=test_ordered_and_anonymized_s3_log_file_path,
+            index_col=0,
         )
         expected_ordered_and_anonymized_s3_log = pandas.read_table(
-            filepath_or_buffer=expected_ordered_and_anonymized_s3_log_file_path, index_col=0,
+            filepath_or_buffer=expected_ordered_and_anonymized_s3_log_file_path,
+            index_col=0,
         )
         pandas.testing.assert_frame_equal(
-            left=test_ordered_and_anonymized_s3_log, right=expected_ordered_and_anonymized_s3_log,
+            left=test_ordered_and_anonymized_s3_log,
+            right=expected_ordered_and_anonymized_s3_log,
         )

@@ -14,7 +14,7 @@ from typing import Literal
 
 import pandas
 import tqdm
-from pydantic import Field, FilePath, validate_call
+from pydantic import DirectoryPath, Field, FilePath, validate_call
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import (
@@ -27,15 +27,16 @@ from ._s3_log_file_parser import parse_raw_s3_log
 @validate_call
 def parse_all_dandi_raw_s3_logs(
     *,
-    base_raw_s3_log_folder_path: FilePath,
-    parsed_s3_log_folder_path: FilePath,
+    base_raw_s3_log_folder_path: DirectoryPath,
+    parsed_s3_log_folder_path: DirectoryPath,
     excluded_log_files: list[FilePath] | None = None,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
     maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count(), default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
-    """Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
+    """
+    Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
 
     Assumes the following folder structure...
 
@@ -70,7 +71,6 @@ def parse_all_dandi_raw_s3_logs(
     """
     base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    parsed_s3_log_folder_path.mkdir(exist_ok=True)
     excluded_log_files = excluded_log_files or list()
     excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
     excluded_ips = excluded_ips or collections.defaultdict(bool)
@@ -178,7 +178,11 @@ def parse_all_dandi_raw_s3_logs(
 
                 header = False if merged_temporary_file_path.exists() else True
                 parsed_s3_log.to_csv(
-                    path_or_buf=merged_temporary_file_path, mode="a", sep="\t", header=header, index=False,
+                    path_or_buf=merged_temporary_file_path,
+                    mode="a",
+                    sep="\t",
+                    header=header,
+                    index=False,
                 )
 
             print("\n\n")
@@ -194,7 +198,6 @@ def parse_all_dandi_raw_s3_logs(
     shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
 
 
-
 # Function cannot be covered because the line calls occur on subprocesses
 # pragma: no cover
 def _multi_job_parse_dandi_raw_s3_log(
@@ -205,7 +208,8 @@ def _multi_job_parse_dandi_raw_s3_log(
     excluded_ips: collections.defaultdict[str, bool] | None,
     maximum_buffer_size_in_bytes: int,
 ) -> None:
-    """A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
+    """
+    A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
 
     Also dumps error stack (which is only typically seen by the worker and not sent back to the main stdout pipe)
     to a log file.
@@ -250,7 +254,6 @@ def _multi_job_parse_dandi_raw_s3_log(
             io.write(error_message)
 
 
-
 def parse_dandi_raw_s3_log(
     *,
     raw_s3_log_file_path: str | pathlib.Path,
@@ -263,7 +266,8 @@ def parse_dandi_raw_s3_log(
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
 ) -> None:
-    """Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+    """
+    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
 
     'Parsing' here means:
       - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
@@ -338,4 +342,3 @@ def parse_dandi_raw_s3_log(
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         order_results=order_results,
     )
-

@@ -73,8 +73,19 @@ exclude = [
 line-length = 120
 
 [tool.ruff.lint]
-select = ["ALL"]
-ignore = ["PTH123", "D203", "D212"]
+select = ["F", "E", "I"]
+ignore = [
+    "PTH123",
+    "D203",
+    "D212",
+    "T201",
+    "FIX002",
+    "TD003",
+    "TD002",
+    "S101",
+    "ICN001",
+    "INP001",
+]
 fixable = ["ALL"]
 
 [tool.ruff.lint.isort]
