@@ -3,12 +3,16 @@
 import collections
 import os
 import pathlib
-import click
 from typing import Literal
 
-from ._dandi_s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
-from .testing._helpers import find_random_example_line
+import click
+
 from ._config import REQUEST_TYPES
+from ._dandi_s3_log_file_parser import (
+    parse_all_dandi_raw_s3_logs,
+    parse_dandi_raw_s3_log,
+)
+from .testing._helpers import find_random_example_line
 
 NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
 

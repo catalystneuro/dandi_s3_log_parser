@@ -3,8 +3,7 @@ import pathlib
 
 class BufferedTextReader:
     def __init__(self, *, file_path: str | pathlib.Path, maximum_buffer_size_in_bytes: int = 10**9):
-        """
-        Lazily read a text file into RAM using buffers of a specified size.
+        """Lazily read a text file into RAM using buffers of a specified size.
 
         Parameters
         ----------
@@ -13,6 +12,7 @@ class BufferedTextReader:
         maximum_buffer_size_in_bytes : int, default: 1 GB
             The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
             source text file.
+
         """
         self.file_path = file_path
         self.maximum_buffer_size_in_bytes = maximum_buffer_size_in_bytes
@@ -50,7 +50,7 @@ class BufferedTextReader:
         if len(buffer) == 0 and last_line != "":
             raise ValueError(
                 f"BufferedTextReader encountered a line at offset {self.offset} that exceeds the buffer "
-                "size! Try increasing the `maximum_buffer_size_in_bytes` to account for this line."
+                "size! Try increasing the `maximum_buffer_size_in_bytes` to account for this line.",
             )
 
         # The last line split by the intermediate buffer may or may not be incomplete

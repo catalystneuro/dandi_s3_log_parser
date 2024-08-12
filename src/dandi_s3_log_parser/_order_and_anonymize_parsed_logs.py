@@ -5,7 +5,7 @@ import tqdm
 
 
 def order_and_anonymize_parsed_logs(
-    unordered_parsed_s3_log_folder_path: pathlib.Path, ordered_and_anonymized_s3_log_folder_path: pathlib.Path
+    unordered_parsed_s3_log_folder_path: pathlib.Path, ordered_and_anonymized_s3_log_folder_path: pathlib.Path,
 ) -> None:
     """Order the contents of all parsed log files chronologically."""
     ordered_and_anonymized_s3_log_folder_path.mkdir(exist_ok=True)
@@ -29,5 +29,5 @@ def order_and_anonymize_parsed_logs(
             ordered_and_anonymized_s3_log_folder_path / unordered_parsed_s3_log_file_path.name
         )
         ordered_and_anonymized_parsed_s3_log.to_csv(
-            path_or_buf=ordered_and_anonymized_parsed_s3_log_file_path, sep="\t", header=True, index=True
+            path_or_buf=ordered_and_anonymized_parsed_s3_log_file_path, sep="\t", header=True, index=True,
         )

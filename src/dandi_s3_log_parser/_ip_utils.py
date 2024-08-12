@@ -1,10 +1,9 @@
 """Various private utility functions for handling IP address related tasks."""
 
-import ipaddress
-import hashlib
-import traceback
 import datetime
-from typing import List
+import hashlib
+import ipaddress
+import traceback
 from importlib.metadata import version as importlib_version
 
 import ipinfo
@@ -14,13 +13,13 @@ from pydantic import FilePath
 
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
+    DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH,
     IPINFO_CREDENTIALS,
     IPINFO_HASH_SALT,
-    DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH,
 )
 
 
-def _cidr_address_to_ip_range(cidr_address: str) -> List[str]:
+def _cidr_address_to_ip_range(cidr_address: str) -> list[str]:
     """Convert a CIDR address to a list of IP addresses."""
     cidr_address_class = type(ipaddress.ip_address(cidr_address.split("/")[0]))
     ip_address_range = list()
@@ -58,12 +57,12 @@ def _load_ip_address_to_region_cache(ip_hash_to_region_file_path: FilePath | Non
     if not ip_hash_to_region_file_path.exists():
         return dict()  # pragma: no cover
 
-    with open(file=ip_hash_to_region_file_path, mode="r") as stream:
+    with open(file=ip_hash_to_region_file_path) as stream:
         return yaml.load(stream=stream, Loader=yaml.SafeLoader)
 
 
 def _save_ip_address_to_region_cache(
-    ip_hash_to_region: dict[str, str], ip_hash_to_region_file_path: FilePath | None = None
+    ip_hash_to_region: dict[str, str], ip_hash_to_region_file_path: FilePath | None = None,
 ) -> None:
     """Save the IP address to region cache to disk."""
     ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
@@ -73,15 +72,14 @@ def _save_ip_address_to_region_cache(
 
 
 def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: str) -> str | None:
-    """
-    If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
+    """If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
     Instead, identify the generic region of the world the request came from and report that instead.
     """
     ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + IPINFO_HASH_SALT).hexdigest()
 
     # Early return for speed
-    lookup_result = ip_hash_to_region.get(ip_hash, None)
+    lookup_result = ip_hash_to_region.get(ip_hash)
     if lookup_result is not None:
         return lookup_result
 
@@ -121,8 +119,8 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(
                 f"Error fetching IP information for {ip_address}!\n\n"
-                f"{type(exception)}: {str(exception)}\n\n"
-                f"{traceback.format_exc()}"
+                f"{type(exception)}: {exception!s}\n\n"
+                f"{traceback.format_exc()}",
             )
 
         return "unknown"

@@ -1,5 +1,4 @@
-"""
-Primary functions for parsing a single line of a raw S3 log.
+"""Primary functions for parsing a single line of a raw S3 log.
 
 The strategy is to...
 
@@ -16,9 +15,9 @@ The strategy is to...
 
 import collections
 import datetime
+import importlib.metadata
 import pathlib
 import re
-import importlib.metadata
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import _get_region_from_ip_address
@@ -73,8 +72,7 @@ def _find_all_possible_substring_indices(*, string: str, substring: str) -> list
 
 
 def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
-    """
-    Attempt to remove bad quotes from a raw line of an S3 log file.
+    """Attempt to remove bad quotes from a raw line of an S3 log file.
 
     These quotes are not properly escaped and are causing issues with the regex pattern.
     Various attempts to fix the regex failed, so this is the most reliable correction I could find.
@@ -98,8 +96,7 @@ def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
 
 
 def _parse_s3_log_line(*, raw_line: str) -> list[str]:
-    """
-    The current method of parsing lines of an S3 log file.
+    """The current method of parsing lines of an S3 log file.
 
     Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
     as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
@@ -168,8 +165,7 @@ def _append_reduced_log_line(
     index: int,
     ip_hash_to_region: dict[str, str],
 ) -> None:
-    """
-    Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
+    """Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
 
     Parameters
     ----------
@@ -184,6 +180,7 @@ def _append_reduced_log_line(
         The type of request to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+
     """
     bucket = "" if bucket is None else bucket
     excluded_ips = excluded_ips or collections.defaultdict(bool)
@@ -198,24 +195,24 @@ def _append_reduced_log_line(
     )
 
     if full_log_line is None:
-        return None
+        return
 
     # Various early skip conditions
     if full_log_line.bucket != bucket:
-        return None
+        return
 
     # Skip all non-success status codes (those in the 200 block)
     if full_log_line.status_code[0] != "2":
-        return None
+        return
 
     # Derived from command string, e.g., "HEAD /blobs/b38/..."
     # Subset first 7 characters for performance
     parsed_request_type = full_log_line.operation.split(".")[1]
     if parsed_request_type != request_type:
-        return None
+        return
 
     if excluded_ips[full_log_line.ip_address] is True:
-        return None
+        return
 
     assert (
         full_log_line.timestamp[-5:] == "+0000"
