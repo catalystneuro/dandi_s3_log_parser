@@ -24,7 +24,7 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
     dandi_s3_log_parser.parse_dandi_raw_s3_log(
         raw_s3_log_file_path=example_raw_s3_log_file_path, parsed_s3_log_folder_path=test_parsed_s3_log_folder_path
     )
-    test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
+    test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
 
     number_of_output_files = len(test_output_file_paths)
     assert number_of_output_files != 0, f"Test expected_output folder ({test_parsed_s3_log_folder_path}) is empty!"
@@ -35,7 +35,7 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
         number_of_output_files == expected_number_of_output_files
     ), f"The number of asset files ({number_of_output_files}) does not match expectation!"
 
-    expected_asset_ids = [file_path.stem for file_path in expected_parsed_s3_log_folder_path.iterdir()]
+    expected_asset_ids = [path.stem for path in expected_parsed_s3_log_folder_path.iterdir() if path.is_file()]
     for test_parsed_s3_log_file_path in test_output_file_paths:
         assert (
             test_parsed_s3_log_file_path.stem in expected_asset_ids

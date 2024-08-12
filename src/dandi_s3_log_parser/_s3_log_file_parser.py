@@ -86,11 +86,8 @@ def parse_raw_s3_log(
     if order_results is True:
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
         temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
+        shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
         temporary_base_folder_path.mkdir(exist_ok=True)
-
-        # Clean up any previous tasks that failed to clean themselves up
-        for previous_task_folder_path in temporary_base_folder_path.iterdir():
-            shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
 
         task_id = str(uuid.uuid4())[:5]
         temporary_folder_path = temporary_base_folder_path / task_id
@@ -107,6 +104,8 @@ def parse_raw_s3_log(
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         ip_hash_to_region_file_path=ip_hash_to_region_file_path,
     )
+
+    print(reduced_logs)
 
     reduced_logs_binned_by_unparsed_asset = dict()
     for reduced_log in reduced_logs:
