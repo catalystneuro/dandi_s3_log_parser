@@ -6,7 +6,7 @@ import pathlib
 import click
 from typing import Literal
 
-from ._s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
+from ._dandi_s3_log_file_parser import parse_dandi_raw_s3_log, parse_all_dandi_raw_s3_logs
 from .testing._helpers import find_random_example_line
 from ._config import REQUEST_TYPES
 
@@ -27,21 +27,6 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     type=click.Path(writable=True),
 )
 @click.option(
-    "--mode",
-    help=(
-        """How to resolve the case when files already exist in the folder containing parsed logs.
-"w" will overwrite existing content, "a" will append or create if the file does not yet exist.
-
-The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
-over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
-"""
-    ),
-    required=False,
-    type=click.Choice(["w", "a"]),
-    default="a",
-)
-@click.option(
     "--excluded_ips",
     help="A comma-separated list of IP addresses to exclude from parsing.",
     required=False,
@@ -52,15 +37,28 @@ HINT: If this iteration is done in chronological order, the resulting parsed log
     "--maximum_number_of_workers",
     help="The maximum number of workers to distribute tasks across.",
     required=False,
-    type=click.IntRange(1, os.cpu_count()),
+    type=click.IntRange(min=1, max=os.cpu_count()),
     default=1,
+)
+@click.option(
+    "--maximum_buffer_size_in_bytes",
+    help=""""
+The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
+    source text files.
+    Actual total RAM usage will be higher due to overhead and caching.
+    Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
+    greater than one.
+""",
+    required=False,
+    type=click.IntRange(min=10**6),  # Minimum of 1 MB
+    default=4 * 10**9,
 )
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
     parsed_s3_log_folder_path: str,
-    mode: Literal["w", "a"] = "a",
-    excluded_ips: str | None = None,
-    maximum_number_of_workers: int = 1,
+    excluded_ips: str | None,
+    maximum_number_of_workers: int,
+    maximum_buffer_size_in_bytes: int,
 ) -> None:
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
@@ -70,9 +68,9 @@ def parse_all_dandi_raw_s3_logs_cli(
     parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=base_raw_s3_log_folder_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        mode=mode,
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
 
 

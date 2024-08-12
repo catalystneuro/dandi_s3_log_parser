@@ -210,11 +210,11 @@ def _append_reduced_log_line(
 
     # Derived from command string, e.g., "HEAD /blobs/b38/..."
     # Subset first 7 characters for performance
-    parsed_request_type = full_log_line.request_uri[:4].removesuffix(" ")
+    parsed_request_type = full_log_line.operation.split(".")[1]
     if parsed_request_type != request_type:
         return None
 
-    if excluded_ips[full_log_line.remote_ip]:
+    if excluded_ips[full_log_line.remote_ip] is True:
         return None
 
     assert (

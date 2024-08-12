@@ -10,6 +10,7 @@ from importlib.metadata import version as importlib_version
 import ipinfo
 import requests
 import yaml
+from pydantic import FilePath
 
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
@@ -50,18 +51,24 @@ def _get_latest_github_ip_ranges() -> list[str]:
     return all_github_ips
 
 
-def _load_ip_address_to_region_cache() -> dict[str, str]:
+def _load_ip_address_to_region_cache(ip_hash_to_region_file_path: FilePath | None = None) -> dict[str, str]:
     """Load the IP address to region cache from disk."""
-    if not _IP_HASH_TO_REGION_FILE_PATH.exists():
+    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
+
+    if not ip_hash_to_region_file_path.exists():
         return dict()
 
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="r") as stream:
+    with open(file=ip_hash_to_region_file_path, mode="r") as stream:
         return yaml.load(stream=stream, Loader=yaml.SafeLoader)
 
 
-def _save_ip_address_to_region_cache(ip_hash_to_region: dict[str, str]) -> None:
+def _save_ip_address_to_region_cache(
+    ip_hash_to_region: dict[str, str], ip_hash_to_region_file_path: FilePath | None = None
+) -> None:
     """Save the IP address to region cache to disk."""
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
+    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
+
+    with open(file=ip_hash_to_region_file_path, mode="w") as stream:
         yaml.dump(data=ip_hash_to_region, stream=stream)
 
 

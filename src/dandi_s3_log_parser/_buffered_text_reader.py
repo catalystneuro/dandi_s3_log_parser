@@ -22,6 +22,7 @@ class BufferedTextReader:
         self.buffer_size_in_bytes = int(maximum_buffer_size_in_bytes / 3)
 
         self.total_file_size = pathlib.Path(file_path).stat().st_size
+        self.number_of_buffers = int(self.total_file_size / self.buffer_size_in_bytes) + 1
         self.offset = 0
 
     def __iter__(self):
@@ -60,3 +61,7 @@ class BufferedTextReader:
             self.offset += self.buffer_size_in_bytes - len(last_line.encode("utf-8"))
 
         return buffer
+
+    def __len__(self) -> int:
+        """Return the number of iterations needed to read the entire file."""
+        return self.number_of_buffers
