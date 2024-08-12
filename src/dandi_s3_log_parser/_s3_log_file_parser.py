@@ -105,8 +105,6 @@ def parse_raw_s3_log(
         ip_hash_to_region_file_path=ip_hash_to_region_file_path,
     )
 
-    print(reduced_logs)
-
     reduced_logs_binned_by_unparsed_asset = dict()
     for reduced_log in reduced_logs:
         raw_asset_id = reduced_log.asset_id
