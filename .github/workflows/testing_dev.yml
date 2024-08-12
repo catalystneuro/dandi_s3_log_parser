@@ -1,5 +1,7 @@
 name: Dev tests
 on:
+  schedule:
+    - cron: "0 6 * * *"  # Daily at 2am EST
   workflow_call:
     secrets:
       IPINFO_HASH_SALT:
