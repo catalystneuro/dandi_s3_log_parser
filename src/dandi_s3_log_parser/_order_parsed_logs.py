@@ -25,7 +25,7 @@ def order_parsed_logs(
     unordered_file_paths = list(unordered_parsed_s3_log_folder_path.glob("*.tsv"))
     for unordered_parsed_s3_log_file_path in tqdm.tqdm(
         iterable=unordered_parsed_s3_log_folder_path.glob("*.tsv"),
-        len=(unordered_file_paths),
+        total=len(unordered_file_paths),
         desc="Ordering parsed logs...",
         position=0,
         leave=True,
