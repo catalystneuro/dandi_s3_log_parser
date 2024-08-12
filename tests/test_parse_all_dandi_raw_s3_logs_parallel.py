@@ -11,7 +11,7 @@ def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local) -
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "ordered_example_1"
+    examples_folder_path = file_parent / "examples" / "parsed_example_1"
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
     test_parsed_s3_log_folder_path = tmpdir / "parsed_example_1"

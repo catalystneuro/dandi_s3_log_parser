@@ -20,7 +20,6 @@ from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._ip_utils import (
     _get_latest_github_ip_ranges,
 )
-from ._order_and_anonymize_parsed_logs import order_and_anonymize_parsed_logs
 from ._s3_log_file_parser import parse_raw_s3_log
 
 
@@ -79,21 +78,6 @@ def parse_all_dandi_raw_s3_logs(
         for github_ip in _get_latest_github_ip_ranges():
             excluded_ips[github_ip] = True
 
-    # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
-    temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
-    temporary_base_folder_path.mkdir(exist_ok=True)
-
-    # Clean up any previous tasks that failed to clean themselves up
-    for previous_task_folder_path in temporary_base_folder_path.iterdir():
-        shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
-
-    task_id = str(uuid.uuid4())[:5]
-    temporary_folder_path = temporary_base_folder_path / task_id
-    temporary_folder_path.mkdir(exist_ok=True)
-
-    temporary_output_folder_path = temporary_folder_path / "output"
-    temporary_output_folder_path.mkdir(exist_ok=True)
-
     def asset_id_handler(*, raw_asset_id: str) -> str:
         split_by_slash = raw_asset_id.split("/")
         return split_by_slash[0] + "_" + split_by_slash[-1]
@@ -110,7 +94,7 @@ def parse_all_dandi_raw_s3_logs(
         ):
             parse_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
-                parsed_s3_log_folder_path=temporary_output_folder_path,
+                parsed_s3_log_folder_path=parsed_s3_log_folder_path,
                 mode="a",
                 excluded_ips=excluded_ips,
                 exclude_github_ips=False,  # Already included in list so avoid repeated construction
@@ -120,6 +104,18 @@ def parse_all_dandi_raw_s3_logs(
                 order_results=False,  # Will immediately reorder all files at the end
             )
     else:
+        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
+        temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
+        temporary_base_folder_path.mkdir(exist_ok=True)
+
+        # Clean up any previous tasks that failed to clean themselves up
+        for previous_task_folder_path in temporary_base_folder_path.iterdir():
+            shutil.rmtree(path=previous_task_folder_path, ignore_errors=True)
+
+        task_id = str(uuid.uuid4())[:5]
+        temporary_folder_path = temporary_base_folder_path / task_id
+        temporary_folder_path.mkdir(exist_ok=True)
+
         per_job_temporary_folder_paths = list()
         for job_index in range(maximum_number_of_workers):
             per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
@@ -172,9 +168,9 @@ def parse_all_dandi_raw_s3_logs(
                 leave=False,
                 mininterval=3.0,
             ):
-                merged_temporary_file_path = temporary_output_folder_path / per_job_parsed_s3_log_file_path.name
+                merged_temporary_file_path = parsed_s3_log_folder_path / per_job_parsed_s3_log_file_path.name
 
-                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path)
+                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path, header=0)
 
                 header = False if merged_temporary_file_path.exists() else True
                 parsed_s3_log.to_csv(
@@ -186,16 +182,6 @@ def parse_all_dandi_raw_s3_logs(
                 )
 
             print("\n\n")
-
-    # Always apply this step at the end to be sure we maintained chronological order
-    # (even if you think order of iteration itself was performed chronologically)
-    # This step also adds the index counter to the TSV
-    order_and_anonymize_parsed_logs(
-        unordered_parsed_s3_log_folder_path=temporary_output_folder_path,
-        anonymized_s3_log_folder_path=parsed_s3_log_folder_path,
-    )
-
-    shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
 
 
 # Function cannot be covered because the line calls occur on subprocesses
