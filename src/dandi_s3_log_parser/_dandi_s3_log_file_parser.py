@@ -99,8 +99,6 @@ def parse_all_dandi_raw_s3_logs(
     # Workaround to particular issue with current repo storage structure on Drogon
     daily_raw_s3_log_file_paths.remove(pathlib.Path("/mnt/backup/dandi/dandiarchive-logs/stats/start-end.log"))
 
-    daily_raw_s3_log_file_paths = list(daily_raw_s3_log_file_paths)[:9]
-
     if maximum_number_of_workers == 1:
         for raw_s3_log_file_path in tqdm.tqdm(
             iterable=daily_raw_s3_log_file_paths,
