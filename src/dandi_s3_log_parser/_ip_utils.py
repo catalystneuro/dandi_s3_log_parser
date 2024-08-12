@@ -9,6 +9,7 @@ from importlib.metadata import version as importlib_version
 import ipinfo
 import requests
 import yaml
+from pydantic import FilePath
 
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
@@ -64,7 +65,18 @@ def _save_ip_hash_to_region_cache(*, ip_hash_to_region: dict[str, str]) -> None:
         yaml.dump(data=ip_hash_to_region, stream=stream)
 
 
-def _get_region_from_ip_address(*, ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
+def _save_ip_address_to_region_cache(
+    ip_hash_to_region: dict[str, str],
+    ip_hash_to_region_file_path: FilePath | None = None,
+) -> None:
+    """Save the IP address to region cache to disk."""
+    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
+
+    with open(file=ip_hash_to_region_file_path, mode="w") as stream:
+        yaml.dump(data=ip_hash_to_region, stream=stream)
+
+
+def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
     """
     If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 

@@ -14,7 +14,8 @@ def find_random_example_line(
     maximum_lines_per_request_type: int = 5,
     seed: int = 0,
 ) -> str:
-    """Return a randomly chosen line from a folder of raw S3 log files to serve as an example for testing purposes.
+    """
+    Return a randomly chosen line from a folder of raw S3 log files to serve as an example for testing purposes.
 
     Parameters
     ----------

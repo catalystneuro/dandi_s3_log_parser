@@ -27,7 +27,8 @@ IPINFO_HASH_SALT = bytes.fromhex(os.environ["IPINFO_HASH_SALT"])
 
 
 def get_hash_salt(base_raw_s3_log_folder_path: str | pathlib.Path) -> str:
-    """Calculate the salt (in hexadecimal encoding) used for IP hashing.
+    """
+    Calculate the salt (in hexadecimal encoding) used for IP hashing.
 
     Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
 
