@@ -6,9 +6,9 @@ import py
 import dandi_s3_log_parser
 
 
-def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local):
+def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
     """
-    'ordered_example_2' contains the basic test cases as well as a collection of 'bad lines' contributed over time.
+    'parsed_example_2' contains the basic test cases as well as a collection of 'bad lines' contributed over time.
     """
     tmpdir = pathlib.Path(tmpdir)
 
@@ -18,15 +18,16 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local):
     initial_number_of_error_folder_contents = len(error_folder_contents)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "ordered_example_2"
+    examples_folder_path = file_parent / "examples" / "parsed_example_2"
     example_raw_s3_log_file_path = examples_folder_path / "example_dandi_s3_log.log"
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
     test_parsed_s3_log_folder_path = tmpdir / "parsed_example_2"
     dandi_s3_log_parser.parse_dandi_raw_s3_log(
-        raw_s3_log_file_path=example_raw_s3_log_file_path, parsed_s3_log_folder_path=test_parsed_s3_log_folder_path
+        raw_s3_log_file_path=example_raw_s3_log_file_path,
+        parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
     )
-    test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
+    test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
 
     number_of_output_files = len(test_output_file_paths)
     expected_number_of_output_files = 3

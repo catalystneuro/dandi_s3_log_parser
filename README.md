@@ -19,6 +19,10 @@ Simple reductions of consolidated S3 logs (consolidation step not included in th
 
 Developed for the [DANDI Archive](https://dandiarchive.org/).
 
+A single line of a raw S3 log file can be between 400-1000+ bytes. Some of the busiest daily logs on the archive can have around 5,014,386 lines. As of summer 2024, there are more than 6 TB of log files collected.
+
+This parser can reduce these to tens of GB of consolidated and anonymized usage data, which is much more manageable for sharing and plotting.
+
 
 
 ## Usage
@@ -29,6 +33,7 @@ To iteratively parse all historical logs all at once (parallelization with 10-15
 parse_all_dandi_raw_s3_logs \
   --base_raw_s3_log_folder_path < base log folder > \
   --parsed_s3_log_folder_path < output folder > \
+  --excluded_log_files < any log files to skip> \
   --excluded_ips < comma-separated list of known IPs to exclude > \
   --maximum_number_of_workers < number of CPUs to use > \
   --maximum_buffer_size_in_bytes < approximate amount of RAM to use >
@@ -40,6 +45,7 @@ For example, on Drogon:
 parse_all_dandi_raw_s3_logs \
   --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
   --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_7_13_2024/GET_per_asset_id \
+  --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 3 \
   --maximum_buffer_size_in_bytes 15000000000

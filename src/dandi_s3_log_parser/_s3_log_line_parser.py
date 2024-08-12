@@ -16,18 +16,17 @@ The strategy is to...
 
 import collections
 import datetime
+import importlib.metadata
 import pathlib
 import re
-import importlib.metadata
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-from ._ip_utils import _get_region_from_ip_address
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
     "bucket",
     "timestamp",
-    "remote_ip",
+    "ip_address",
     "requester",
     "request_id",
     "operation",
@@ -51,7 +50,7 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "tls_version",
     "access_point_arn",
 ]
-_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "region"]
+_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "ip_address"]
 
 _FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
 _ReducedLogLine = collections.namedtuple("ReducedLogLine", _REDUCED_PATTERN_TO_FIELD_MAPPING)
@@ -166,7 +165,6 @@ def _append_reduced_log_line(
     excluded_ips: collections.defaultdict[str, bool],
     log_file_path: pathlib.Path,
     index: int,
-    ip_hash_to_region: dict[str, str],
 ) -> None:
     """
     Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
@@ -184,6 +182,7 @@ def _append_reduced_log_line(
         The type of request to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+
     """
     bucket = "" if bucket is None else bucket
     excluded_ips = excluded_ips or collections.defaultdict(bool)
@@ -198,24 +197,23 @@ def _append_reduced_log_line(
     )
 
     if full_log_line is None:
-        return None
+        return
 
     # Various early skip conditions
     if full_log_line.bucket != bucket:
-        return None
+        return
 
     # Skip all non-success status codes (those in the 200 block)
     if full_log_line.status_code[0] != "2":
-        return None
+        return
 
-    # Derived from command string, e.g., "HEAD /blobs/b38/..."
-    # Subset first 7 characters for performance
+    # Derived from operation string, e.g., "REST.GET.OBJECT"
     parsed_request_type = full_log_line.operation.split(".")[1]
     if parsed_request_type != request_type:
-        return None
+        return
 
-    if excluded_ips[full_log_line.remote_ip] is True:
-        return None
+    if excluded_ips[full_log_line.ip_address] is True:
+        return
 
     assert (
         full_log_line.timestamp[-5:] == "+0000"
@@ -223,12 +221,11 @@ def _append_reduced_log_line(
 
     parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
     parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
-    region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.remote_ip)
     reduced_log_line = _ReducedLogLine(
         asset_id=full_log_line.asset_id,
         timestamp=parsed_timestamp,
         bytes_sent=parsed_bytes_sent,
-        region=region,
+        ip_address=full_log_line.ip_address,
     )
 
     reduced_log_lines.append(reduced_log_line)

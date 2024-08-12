@@ -30,6 +30,7 @@ def find_random_example_line(
         These lines are always found chronologically from the start of the file.
     seed : int
         The seed to use for the random number generator.
+
     """
     raw_s3_log_folder_path = pathlib.Path(raw_s3_log_folder_path)
 
@@ -61,7 +62,7 @@ def find_random_example_line(
 
     # Safe - but possibly slower
     for random_log_file_path in all_raw_s3_log_file_paths:
-        with open(file=random_log_file_path, mode="r") as io:
+        with open(file=random_log_file_path) as io:
             all_lines = io.readlines()
 
         # 170 is just an estimation
@@ -87,7 +88,7 @@ def find_random_example_line(
 
         print(
             f"No lines found for request type ('{request_type}') in file '{random_log_file_path}'! "
-            "Scanning the next file..."
+            "Scanning the next file...",
         )
 
         if running_counts_by_request_type[request_type] > maximum_lines_per_request_type:
