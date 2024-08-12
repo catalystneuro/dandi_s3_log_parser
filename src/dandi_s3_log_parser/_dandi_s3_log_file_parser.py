@@ -210,7 +210,7 @@ def parse_all_dandi_raw_s3_logs(
         ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
     )
 
-    shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
+    shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
 
     return None
 

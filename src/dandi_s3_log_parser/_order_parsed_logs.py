@@ -21,7 +21,7 @@ def order_parsed_logs(
     date = datetime.datetime.now().strftime("%y%m%d")
     ordering_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_ordering_errors.txt"
 
-    for unordered_parsed_s3_log_file_path in unordered_parsed_s3_log_folder_path.iterdir():
+    for unordered_parsed_s3_log_file_path in unordered_parsed_s3_log_folder_path.glob("*.tsv"):
         try:
             error_message = f"Ordering {unordered_parsed_s3_log_file_path}...\n\n"
 
