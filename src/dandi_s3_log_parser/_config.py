@@ -12,7 +12,9 @@ DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH.mkdir(exist_ok=True)
 _IP_HASH_TO_REGION_FILE_PATH = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "ip_hash_to_region.yaml"
 
 if "IPINFO_CREDENTIALS" not in os.environ:
-    raise ValueError("The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!")
+    raise ValueError(
+        "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
+    )  # pragma: no cover
 IPINFO_CREDENTIALS = os.environ["IPINFO_CREDENTIALS"]
 
 if "IPINFO_HASH_SALT" not in os.environ:
@@ -20,7 +22,7 @@ if "IPINFO_HASH_SALT" not in os.environ:
         "The environment variable 'IPINFO_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
         "To retrieve the value, set a temporary value to this environment variable and then use the `get_hash_salt` "
         "helper function and set it to the correct value."
-    )
+    )  # pragma: no cover
 IPINFO_HASH_SALT = bytes.fromhex(os.environ["IPINFO_HASH_SALT"])
 
 

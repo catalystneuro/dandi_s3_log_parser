@@ -26,7 +26,7 @@ def _cidr_address_to_ip_range(cidr_address: str) -> List[str]:
     ip_address_range = list()
     if cidr_address_class is ipaddress.IPv4Address:
         ip_address_range = ipaddress.IPv4Network(address=cidr_address)
-    elif cidr_address_class is ipaddress.IPv6Address:
+    elif cidr_address_class is ipaddress.IPv6Address:  # pragma: no cover
         ip_address_range = ipaddress.IPv6Network(address=cidr_address)
 
     return [str(ip_address) for ip_address in ip_address_range]
@@ -56,7 +56,7 @@ def _load_ip_address_to_region_cache(ip_hash_to_region_file_path: FilePath | Non
     ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
 
     if not ip_hash_to_region_file_path.exists():
-        return dict()
+        return dict()  # pragma: no cover
 
     with open(file=ip_hash_to_region_file_path, mode="r") as stream:
         return yaml.load(stream=stream, Loader=yaml.SafeLoader)
@@ -86,7 +86,8 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
         return lookup_result
 
     # Log errors in IP fetching
-    try:
+    # Lines cannot be covered without testing on a real IP
+    try:  # pragma: no cover
         handler = ipinfo.getHandler(access_token=IPINFO_CREDENTIALS)
         details = handler.getDetails(ip_address=ip_address)
 
@@ -106,10 +107,10 @@ def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: s
         ip_hash_to_region[ip_hash] = region_string
 
         return region_string
-    except ipinfo.exceptions.RequestQuotaExceededError:
+    except ipinfo.exceptions.RequestQuotaExceededError:  # pragma: no cover
         # Return the generic 'unknown' but do not cache
         return "unknown"
-    except Exception as exception:
+    except Exception as exception:  # pragma: no cover
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
