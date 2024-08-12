@@ -9,13 +9,9 @@ from typing import Callable, Literal
 import pandas
 import tqdm
 
-from ._ip_utils import (
-    _load_ip_address_to_region_cache,
-    _save_ip_address_to_region_cache,
-)
 from ._s3_log_line_parser import _ReducedLogLine, _append_reduced_log_line
 from ._buffered_text_reader import BufferedTextReader
-from ._order_parsed_logs import order_parsed_logs
+from ._order_and_anonymize_parsed_logs import order_and_anonymize_parsed_logs
 
 
 def parse_raw_s3_log(
@@ -30,7 +26,6 @@ def parse_raw_s3_log(
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
-    ip_hash_to_region_file_path: str | pathlib.Path | None = None,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -102,7 +97,6 @@ def parse_raw_s3_log(
         excluded_ips=excluded_ips,
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
-        ip_hash_to_region_file_path=ip_hash_to_region_file_path,
     )
 
     reduced_logs_binned_by_unparsed_asset = dict()
@@ -114,7 +108,7 @@ def parse_raw_s3_log(
 
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["timestamp"].append(reduced_log.timestamp)
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["bytes_sent"].append(reduced_log.bytes_sent)
-        reduced_logs_binned_by_unparsed_asset[raw_asset_id]["region"].append(reduced_log.region)
+        reduced_logs_binned_by_unparsed_asset[raw_asset_id]["ip_address"].append(reduced_log.ip_address)
 
     if asset_id_handler is not None:
         reduced_logs_binned_by_asset = dict()
@@ -135,9 +129,9 @@ def parse_raw_s3_log(
         data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
 
     if order_results is True:
-        order_parsed_logs(
+        order_and_anonymize_parsed_logs(
             unordered_parsed_s3_log_folder_path=temporary_output_folder_path,
-            ordered_parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+            anonymized_s3_log_folder_path=parsed_s3_log_folder_path,
         )
 
         shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
@@ -180,10 +174,6 @@ def _get_reduced_log_lines(
     bucket = "" if bucket is None else bucket
     tqdm_kwargs = tqdm_kwargs or dict()
 
-    # One-time initialization/read of IP address to region cache for performance
-    # This dictionary is intended to be mutated throughout the process
-    ip_hash_to_region = _load_ip_address_to_region_cache(ip_hash_to_region_file_path=ip_hash_to_region_file_path)
-
     # Perform I/O read in batches to improve performance
     resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=1.0)
     resolved_tqdm_kwargs.update(tqdm_kwargs)
@@ -206,11 +196,8 @@ def _get_reduced_log_lines(
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
                 index=index,
-                ip_hash_to_region=ip_hash_to_region,
             )
             index += 1
         per_buffer_index += index
-
-    _save_ip_address_to_region_cache(ip_hash_to_region=ip_hash_to_region)
 
     return reduced_log_lines

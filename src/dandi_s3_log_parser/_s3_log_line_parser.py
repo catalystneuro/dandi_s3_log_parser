@@ -27,7 +27,7 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
     "bucket",
     "timestamp",
-    "remote_ip",
+    "ip_address",
     "requester",
     "request_id",
     "operation",
@@ -51,7 +51,7 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "tls_version",
     "access_point_arn",
 ]
-_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "region"]
+_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "ip_address"]
 
 _FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
 _ReducedLogLine = collections.namedtuple("ReducedLogLine", _REDUCED_PATTERN_TO_FIELD_MAPPING)
@@ -214,7 +214,7 @@ def _append_reduced_log_line(
     if parsed_request_type != request_type:
         return None
 
-    if excluded_ips[full_log_line.remote_ip] is True:
+    if excluded_ips[full_log_line.ip_address] is True:
         return None
 
     assert (
@@ -223,7 +223,7 @@ def _append_reduced_log_line(
 
     parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
     parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
-    region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.remote_ip)
+    region = _get_region_from_ip_address(ip_hash_to_region=ip_hash_to_region, ip_address=full_log_line.ip_address)
     reduced_log_line = _ReducedLogLine(
         asset_id=full_log_line.asset_id,
         timestamp=parsed_timestamp,

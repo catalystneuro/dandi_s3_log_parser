@@ -27,6 +27,13 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     type=click.Path(writable=True),
 )
 @click.option(
+    "--excluded_log_files",
+    help="A comma-separated list of log files to exclude from parsing.",
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
     "--excluded_ips",
     help="A comma-separated list of IP addresses to exclude from parsing.",
     required=False,
@@ -56,11 +63,13 @@ The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
     parsed_s3_log_folder_path: str,
+    excluded_log_files: str | None,
     excluded_ips: str | None,
     maximum_number_of_workers: int,
     maximum_buffer_size_in_bytes: int,
 ) -> None:
-    split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
+    split_excluded_log_files = excluded_log_files.split(",") if excluded_log_files is not None else list()
+    split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
         handled_excluded_ips[excluded_ip] = True
@@ -68,6 +77,7 @@ def parse_all_dandi_raw_s3_logs_cli(
     parse_all_dandi_raw_s3_logs(
         base_raw_s3_log_folder_path=base_raw_s3_log_folder_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+        excluded_log_files=split_excluded_log_files,
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
