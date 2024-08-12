@@ -7,7 +7,8 @@ import dandi_s3_log_parser
 
 
 def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
-    """Most basic test of functionality.
+    """
+    Most basic test of functionality.
 
     If there are failures in the parsing of any lines found in application,
     please raise an issue and contribute them to the example log collection.
@@ -21,7 +22,8 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local):
 
     test_parsed_s3_log_folder_path = tmpdir / "parsed_example_0"
     dandi_s3_log_parser.parse_dandi_raw_s3_log(
-        raw_s3_log_file_path=example_raw_s3_log_file_path, parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
+        raw_s3_log_file_path=example_raw_s3_log_file_path,
+        parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
     )
     test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
 

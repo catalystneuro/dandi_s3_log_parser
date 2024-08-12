@@ -1,4 +1,5 @@
-"""Primary functions for parsing a single line of a raw S3 log.
+"""
+Primary functions for parsing a single line of a raw S3 log.
 
 The strategy is to...
 
@@ -72,7 +73,8 @@ def _find_all_possible_substring_indices(*, string: str, substring: str) -> list
 
 
 def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
-    """Attempt to remove bad quotes from a raw line of an S3 log file.
+    """
+    Attempt to remove bad quotes from a raw line of an S3 log file.
 
     These quotes are not properly escaped and are causing issues with the regex pattern.
     Various attempts to fix the regex failed, so this is the most reliable correction I could find.
@@ -96,7 +98,8 @@ def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
 
 
 def _parse_s3_log_line(*, raw_line: str) -> list[str]:
-    """The current method of parsing lines of an S3 log file.
+    """
+    The current method of parsing lines of an S3 log file.
 
     Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
     as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
@@ -165,7 +168,8 @@ def _append_reduced_log_line(
     index: int,
     ip_hash_to_region: dict[str, str],
 ) -> None:
-    """Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
+    """
+    Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
 
     Parameters
     ----------

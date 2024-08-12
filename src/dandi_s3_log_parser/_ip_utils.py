@@ -62,7 +62,8 @@ def _load_ip_address_to_region_cache(ip_hash_to_region_file_path: FilePath | Non
 
 
 def _save_ip_address_to_region_cache(
-    ip_hash_to_region: dict[str, str], ip_hash_to_region_file_path: FilePath | None = None,
+    ip_hash_to_region: dict[str, str],
+    ip_hash_to_region_file_path: FilePath | None = None,
 ) -> None:
     """Save the IP address to region cache to disk."""
     ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
@@ -72,7 +73,8 @@ def _save_ip_address_to_region_cache(
 
 
 def _get_region_from_ip_address(ip_hash_to_region: dict[str, str], ip_address: str) -> str | None:
-    """If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
+    """
+    If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
     Instead, identify the generic region of the world the request came from and report that instead.
     """

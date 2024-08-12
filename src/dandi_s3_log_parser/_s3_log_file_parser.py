@@ -28,7 +28,8 @@ def parse_raw_s3_log(
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
 ) -> None:
-    """Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+    """
+    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
 
     'Parsing' here means:
       - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
@@ -104,7 +105,8 @@ def parse_raw_s3_log(
     for reduced_log in reduced_logs:
         raw_asset_id = reduced_log.asset_id
         reduced_logs_binned_by_unparsed_asset[raw_asset_id] = reduced_logs_binned_by_unparsed_asset.get(
-            raw_asset_id, collections.defaultdict(list),
+            raw_asset_id,
+            collections.defaultdict(list),
         )
 
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["timestamp"].append(reduced_log.timestamp)
@@ -138,7 +140,6 @@ def parse_raw_s3_log(
         shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
 
 
-
 def _get_reduced_log_lines(
     *,
     raw_s3_log_file_path: pathlib.Path,
@@ -149,7 +150,8 @@ def _get_reduced_log_lines(
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     ip_hash_to_region_file_path: pathlib.Path | None,
 ) -> list[_ReducedLogLine]:
-    """Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
+    """
+    Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
 
     Parameters
     ----------
@@ -181,10 +183,13 @@ def _get_reduced_log_lines(
     reduced_log_lines = list()
     per_buffer_index = 0
     buffered_text_reader = BufferedTextReader(
-        file_path=raw_s3_log_file_path, maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+        file_path=raw_s3_log_file_path,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
     for buffered_raw_lines in tqdm.tqdm(
-        iterable=buffered_text_reader, total=len(buffered_text_reader), **resolved_tqdm_kwargs,
+        iterable=buffered_text_reader,
+        total=len(buffered_text_reader),
+        **resolved_tqdm_kwargs,
     ):
         index = 0
         for raw_line in buffered_raw_lines:

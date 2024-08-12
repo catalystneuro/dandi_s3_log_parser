@@ -35,7 +35,8 @@ def parse_all_dandi_raw_s3_logs(
     maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count(), default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
-    """Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
+    """
+    Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
 
     Assumes the following folder structure...
 
@@ -178,7 +179,11 @@ def parse_all_dandi_raw_s3_logs(
 
                 header = False if merged_temporary_file_path.exists() else True
                 parsed_s3_log.to_csv(
-                    path_or_buf=merged_temporary_file_path, mode="a", sep="\t", header=header, index=False,
+                    path_or_buf=merged_temporary_file_path,
+                    mode="a",
+                    sep="\t",
+                    header=header,
+                    index=False,
                 )
 
             print("\n\n")
@@ -194,7 +199,6 @@ def parse_all_dandi_raw_s3_logs(
     shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
 
 
-
 # Function cannot be covered because the line calls occur on subprocesses
 # pragma: no cover
 def _multi_job_parse_dandi_raw_s3_log(
@@ -205,7 +209,8 @@ def _multi_job_parse_dandi_raw_s3_log(
     excluded_ips: collections.defaultdict[str, bool] | None,
     maximum_buffer_size_in_bytes: int,
 ) -> None:
-    """A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
+    """
+    A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
 
     Also dumps error stack (which is only typically seen by the worker and not sent back to the main stdout pipe)
     to a log file.
@@ -250,7 +255,6 @@ def _multi_job_parse_dandi_raw_s3_log(
             io.write(error_message)
 
 
-
 def parse_dandi_raw_s3_log(
     *,
     raw_s3_log_file_path: str | pathlib.Path,
@@ -263,7 +267,8 @@ def parse_dandi_raw_s3_log(
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     order_results: bool = True,
 ) -> None:
-    """Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+    """
+    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
 
     'Parsing' here means:
       - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
@@ -338,4 +343,3 @@ def parse_dandi_raw_s3_log(
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         order_results=order_results,
     )
-
