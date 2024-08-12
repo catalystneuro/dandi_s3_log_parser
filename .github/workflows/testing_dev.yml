@@ -8,7 +8,6 @@ on:
         required: true
       CODECOV_CREDENTIALS:
         required: true
-  workflow_dispatch:
 
 env:
   IPINFO_HASH_SALT: ${{ secrets.IPINFO_HASH_SALT }}

@@ -27,19 +27,32 @@ Developed for the [DANDI Archive](https://dandiarchive.org/).
 To iteratively parse all historical logs all at once (parallelization with 10-15 total GB recommended):
 
 ```bash
-parse_all_dandi_raw_s3_logs --base_raw_s3_log_folder_path < base log folder > --parsed_s3_log_folder_path < output folder > --excluded_ips < comma-separated list of known IPs to exclude > --maximum_number_of_workers < number of CPUs to use > --maximum_buffer_size_in_bytes < approximate amount of RAM to use >
+parse_all_dandi_raw_s3_logs \
+  --base_raw_s3_log_folder_path < base log folder > \
+  --parsed_s3_log_folder_path < output folder > \
+  --excluded_ips < comma-separated list of known IPs to exclude > \
+  --maximum_number_of_workers < number of CPUs to use > \
+  --maximum_buffer_size_in_bytes < approximate amount of RAM to use >
 ```
 
 For example, on Drogon:
 
 ```bash
-parse_all_dandi_raw_s3_logs --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_7_13_2024/GET_per_asset_id --excluded_ips < Drogon's IP > --maximum_number_of_workers 30 --maximum_buffer_size_in_bytes 15000000000
+parse_all_dandi_raw_s3_logs \
+  --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
+  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_7_13_2024/GET_per_asset_id \
+  --excluded_ips < Drogons IP > \
+  --maximum_number_of_workers 3 \
+  --maximum_buffer_size_in_bytes 15000000000
 ```
 
 To parse only a single log file at a time, such as in a CRON job:
 
 ```bash
-parse_dandi_raw_s3_log --raw_s3_log_file_path < s3 log file path > --parsed_s3_log_folder_path < output folder > --excluded_ips < comma-separated list of known IPs to exclude >
+parse_dandi_raw_s3_log \
+  --raw_s3_log_file_path < s3 log file path > \
+  --parsed_s3_log_folder_path < output folder > \
+  --excluded_ips < comma-separated list of known IPs to exclude >
 ```
 
 
