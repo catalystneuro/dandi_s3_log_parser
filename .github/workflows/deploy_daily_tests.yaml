@@ -1,0 +1,18 @@
+name: Deploy daily tests
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # Daily at 2am EST
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  DailyTests:
+    uses: ./.github/workflows/testing_dev.yml
+    secrets:
+      IPINFO_HASH_SALT: ${{ secrets.IPINFO_HASH_SALT }}
+      IPINFO_CREDENTIALS: ${{ secrets.IPINFO_CREDENTIALS }}
+      CODECOV_CREDENTIALS: ${{ secrets.CODECOV_CREDENTIALS }}
