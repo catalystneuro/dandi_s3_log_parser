@@ -70,9 +70,11 @@ extend-exclude = '''
 exclude = [
   "*/__init__.py"
 ]
+line-length = 120
 
 [tool.ruff.lint]
 select = ["ALL"]
+ignore = ["PTH123", "D203", "D212"]
 fixable = ["ALL"]
 
 [tool.ruff.lint.isort]

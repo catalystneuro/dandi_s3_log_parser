@@ -1,9 +1,11 @@
 import pathlib
+from typing import Self
 
 
 class BufferedTextReader:
-    def __init__(self, *, file_path: str | pathlib.Path, maximum_buffer_size_in_bytes: int = 10**9):
-        """Lazily read a text file into RAM using buffers of a specified size.
+    def __init__(self, *, file_path: str | pathlib.Path, maximum_buffer_size_in_bytes: int = 10**9) -> None:
+        """
+        Lazily read a text file into RAM using buffers of a specified size.
 
         Parameters
         ----------
@@ -25,7 +27,7 @@ class BufferedTextReader:
         self.number_of_buffers = int(self.total_file_size / self.buffer_size_in_bytes) + 1
         self.offset = 0
 
-    def __iter__(self):
+    def __iter__(self) -> Self:
         return self
 
     def __next__(self) -> list[str]:
@@ -48,10 +50,11 @@ class BufferedTextReader:
         last_line = split_intermediate_buffer[-1]
 
         if len(buffer) == 0 and last_line != "":
-            raise ValueError(
+            message = (
                 f"BufferedTextReader encountered a line at offset {self.offset} that exceeds the buffer "
-                "size! Try increasing the `maximum_buffer_size_in_bytes` to account for this line.",
+                "size! Try increasing the `maximum_buffer_size_in_bytes` to account for this line."
             )
+            raise ValueError(message)
 
         # The last line split by the intermediate buffer may or may not be incomplete
         if decoded_intermediate_buffer.endswith("\n"):
