@@ -83,9 +83,9 @@ def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
     ending_quotes_indices = _find_all_possible_substring_indices(string=raw_line, substring='" ')
 
     # If even further unexpected structure, just return the bad parsed line so that the error reporter can catch it
-    if len(starting_quotes_indices) == 0:
+    if len(starting_quotes_indices) == 0:  # pragma: no cover
         return bad_parsed_line
-    if len(starting_quotes_indices) != len(ending_quotes_indices):
+    if len(starting_quotes_indices) != len(ending_quotes_indices):  # pragma: no cover
         return bad_parsed_line
 
     cleaned_raw_line = raw_line[0 : starting_quotes_indices[0]]
@@ -143,7 +143,7 @@ def _get_full_log_line(
 
     # Deviant log entry; usually some very ill-formed content in the URI
     # Dump information to a log file in the base folder for easy sharing
-    if full_log_line is None:
+    if full_log_line is None:  # pragma: no cover
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
