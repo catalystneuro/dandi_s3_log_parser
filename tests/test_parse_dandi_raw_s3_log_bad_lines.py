@@ -27,7 +27,7 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
         raw_s3_log_file_path=example_raw_s3_log_file_path,
         parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
     )
-    test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
+    test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
 
     number_of_output_files = len(test_output_file_paths)
     expected_number_of_output_files = 3

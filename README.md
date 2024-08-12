@@ -19,6 +19,10 @@ Simple reductions of consolidated S3 logs (consolidation step not included in th
 
 Developed for the [DANDI Archive](https://dandiarchive.org/).
 
+A single line of a raw S3 log file can be between 400-1000+ bytes. Some of the busiest daily logs on the archive can have around 5,014,386 lines. As of summer 2024, there are more than 6 TB of log files collected.
+
+This parser can reduce these to tens of GB of consolidated and anonymized usage data, which is much more manageable for sharing and plotting.
+
 
 
 ## Usage

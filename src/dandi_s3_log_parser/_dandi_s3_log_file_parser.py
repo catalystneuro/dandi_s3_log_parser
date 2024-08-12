@@ -66,7 +66,6 @@ def parse_all_dandi_raw_s3_logs(
         Actual total RAM usage will be higher due to overhead and caching.
         Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
         greater than one.
-
     """
     base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
@@ -101,7 +100,6 @@ def parse_all_dandi_raw_s3_logs(
                 asset_id_handler=asset_id_handler,
                 tqdm_kwargs=dict(position=1, leave=False),
                 maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
-                order_results=False,  # Will immediately reorder all files at the end
             )
     else:
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
@@ -232,7 +230,6 @@ def _multi_job_parse_dandi_raw_s3_log(
             asset_id_handler=asset_id_handler,
             tqdm_kwargs=dict(position=job_index + 1, leave=False),
             maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
-            order_results=False,  # Always disable this for parallel processing
         )
     except Exception as exception:
         with open(file=parallel_errors_file_path, mode="a") as io:
@@ -250,7 +247,6 @@ def parse_dandi_raw_s3_log(
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
-    order_results: bool = True,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -272,7 +268,6 @@ def parse_dandi_raw_s3_log(
 
         The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-        HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     exclude_github_ips : bool, default: True
@@ -290,11 +285,6 @@ def parse_dandi_raw_s3_log(
     maximum_buffer_size_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
         source text file.
-    order_results : bool, default: True
-        Whether to order the results chronologically.
-        This is strongly suggested, but a common case of disabling it is if ordering is intended to be applied after
-        multiple steps of processing instead of during this operation.
-
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
@@ -326,5 +316,4 @@ def parse_dandi_raw_s3_log(
         asset_id_handler=asset_id_handler,
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
-        order_results=order_results,
     )

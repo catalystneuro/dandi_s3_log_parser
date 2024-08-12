@@ -21,11 +21,13 @@ def test_parse_dandi_raw_s3_log_example_0(tmpdir: py.path.local) -> None:
     expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
 
     test_parsed_s3_log_folder_path = tmpdir / "parsed_example_0"
+    test_parsed_s3_log_folder_path.mkdir(exist_ok=True)
+
     dandi_s3_log_parser.parse_dandi_raw_s3_log(
         raw_s3_log_file_path=example_raw_s3_log_file_path,
         parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
     )
-    test_output_file_paths = [path for path in test_parsed_s3_log_folder_path.iterdir() if path.is_file()]
+    test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
 
     number_of_output_files = len(test_output_file_paths)
     assert number_of_output_files != 0, f"Test expected_output folder ({test_parsed_s3_log_folder_path}) is empty!"

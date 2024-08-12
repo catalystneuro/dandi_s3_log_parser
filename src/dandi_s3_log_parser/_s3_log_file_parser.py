@@ -2,8 +2,6 @@
 
 import collections
 import pathlib
-import shutil
-import uuid
 from collections.abc import Callable
 from typing import Literal
 
@@ -11,7 +9,6 @@ import pandas
 import tqdm
 
 from ._buffered_text_reader import BufferedTextReader
-from ._order_and_anonymize_parsed_logs import order_and_anonymize_parsed_logs
 from ._s3_log_line_parser import _append_reduced_log_line, _ReducedLogLine
 
 
@@ -26,9 +23,9 @@ def parse_raw_s3_log(
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
-    order_results: bool = True,
 ) -> None:
-    """Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+    """
+    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
 
     'Parsing' here means:
       - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
@@ -47,7 +44,6 @@ def parse_raw_s3_log(
 
         The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-        HINT: If this iteration is done in chronological order, the resulting parsed logs will also maintain that order.
     bucket : str
         Only parse and return lines that match this bucket.
     request_type : str, default: "GET"
@@ -67,29 +63,12 @@ def parse_raw_s3_log(
     maximum_buffer_size_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
         source text file.
-    order_results : bool, default: True
-        Whether to order the results chronologically.
-        This is strongly suggested, but a common case of disabling it is if ordering is intended to be applied after
-        multiple steps of processing instead of during this operation.
-
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
     parsed_s3_log_folder_path.mkdir(exist_ok=True)
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     tqdm_kwargs = tqdm_kwargs or dict()
-
-    if order_results is True:
-        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
-        temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
-        shutil.rmtree(path=temporary_base_folder_path, ignore_errors=True)
-        temporary_base_folder_path.mkdir(exist_ok=True)
-
-        task_id = str(uuid.uuid4())[:5]
-        temporary_folder_path = temporary_base_folder_path / task_id
-        temporary_folder_path.mkdir(exist_ok=True)
-        temporary_output_folder_path = temporary_folder_path / "output"
-        temporary_output_folder_path.mkdir(exist_ok=True)
 
     reduced_logs = _get_reduced_log_lines(
         raw_s3_log_file_path=raw_s3_log_file_path,
@@ -122,21 +101,12 @@ def parse_raw_s3_log(
         reduced_logs_binned_by_asset = reduced_logs_binned_by_unparsed_asset
 
     for raw_asset_id, reduced_logs_per_asset in reduced_logs_binned_by_asset.items():
-        output_folder_path = temporary_output_folder_path if order_results is True else parsed_s3_log_folder_path
-        parsed_s3_log_file_path = output_folder_path / f"{raw_asset_id}.tsv"
+        parsed_s3_log_file_path = parsed_s3_log_folder_path / f"{raw_asset_id}.tsv"
 
         data_frame = pandas.DataFrame(data=reduced_logs_per_asset)
 
         header = False if parsed_s3_log_file_path.exists() is True and mode == "a" else True
         data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
-
-    if order_results is True:
-        order_and_anonymize_parsed_logs(
-            unordered_parsed_s3_log_folder_path=temporary_output_folder_path,
-            anonymized_s3_log_folder_path=parsed_s3_log_folder_path,
-        )
-
-        shutil.rmtree(path=temporary_output_folder_path, ignore_errors=True)
 
 
 def _get_reduced_log_lines(
@@ -148,7 +118,8 @@ def _get_reduced_log_lines(
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> list[_ReducedLogLine]:
-    """Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
+    """
+    Reduce the full S3 log file to minimal content and return a list of in-memory collections.namedtuple objects.
 
     Parameters
     ----------
@@ -165,7 +136,6 @@ def _get_reduced_log_lines(
     maximum_buffer_size_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
         source text file.
-
     """
     assert raw_s3_log_file_path.suffix == ".log", f"{raw_s3_log_file_path=} should end in '.log'!"
 
