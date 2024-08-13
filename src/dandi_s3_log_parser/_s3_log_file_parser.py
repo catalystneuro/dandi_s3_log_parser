@@ -90,6 +90,7 @@ def parse_raw_s3_log(
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["timestamp"].append(reduced_log.timestamp)
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["bytes_sent"].append(reduced_log.bytes_sent)
         reduced_logs_binned_by_unparsed_asset[raw_asset_id]["ip_address"].append(reduced_log.ip_address)
+        reduced_logs_binned_by_unparsed_asset[raw_asset_id]["line_index"].append(reduced_log.line_index)
 
     if asset_id_handler is not None:
         reduced_logs_binned_by_asset = dict()
@@ -160,6 +161,8 @@ def _get_reduced_log_lines(
     ):
         index = 0
         for raw_line in buffered_raw_lines:
+            line_index = per_buffer_index + index
+
             _append_reduced_log_line(
                 raw_line=raw_line,
                 reduced_log_lines=reduced_log_lines,
@@ -167,7 +170,7 @@ def _get_reduced_log_lines(
                 request_type=request_type,
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
-                index=index,
+                line_index=line_index,
             )
             index += 1
         per_buffer_index += index
