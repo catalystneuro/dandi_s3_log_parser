@@ -4,7 +4,7 @@
     <a href="https://codecov.io/github/CatalystNeuro/dandi_s3_log_parser?branch=main"><img alt="codecov" src="https://codecov.io/github/CatalystNeuro/dandi_s3_log_parser/coverage.svg?branch=main"></a>
   </p>
   <p align="center">
-    <a href="https://pypi.org/project/dandi_s3_log_parser/"><img alt="PyPI latest release version" src="https://badge.fury.io/py/dandi_s3_log_parser.svg"></a>
+    <a href="https://pypi.org/project/dandi_s3_log_parser/"><img alt="PyPI latest release version" src="https://badge.fury.io/py/dandi_s3_log_parser.svg?id=py&kill_cache=1"></a>
     <a href="https://pypi.org/project/dandi_s3_log_parser/"><img alt="Ubuntu" src="https://img.shields.io/badge/Ubuntu-E95420?style=flat&logo=ubuntu&logoColor=white"></a>
     <a href="https://pypi.org/project/dandi_s3_log_parser/"><img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/dandi_s3_log_parser.svg"></a>
     <a href="https://github.com/catalystneuro/dandi_s3_log_parser/blob/main/license.txt"><img alt="License: BSD-3" src="https://img.shields.io/pypi/l/dandi_s3_log_parser.svg"></a>
@@ -15,13 +15,21 @@
   </p>
 </p>
 
-Simple reductions of consolidated S3 logs (consolidation step not included in this repository) into minimal information for public sharing and plotting.
+Extraction of minimal information from consolidated raw S3 logs for public sharing and plotting.
 
 Developed for the [DANDI Archive](https://dandiarchive.org/).
 
-A single line of a raw S3 log file can be between 400-1000+ bytes. Some of the busiest daily logs on the archive can have around 5,014,386 lines. As of summer 2024, there are more than 6 TB of log files collected.
+A few summary facts as of 2024:
 
-This parser can reduce these to tens of GB of consolidated and anonymized usage data, which is much more manageable for sharing and plotting.
+- A single line of a raw S3 log file can be between 400-1000+ bytes.
+- Some of the busiest daily logs on the archive can have around 5,014,386 lines.
+- There are more than 6 TB of log files collected in total.
+
+This parser reduces this amount of raw content down to only around 20 GB of consolidated usage data per asset.
+
+These are then additionally mapped only to currently available assets in persistent published Dandiset versions and current drafts, which only comprise around 100 MB of total data.
+
+These small Dandiset-specific summaries are soon to be shared publicly.
 
 
 

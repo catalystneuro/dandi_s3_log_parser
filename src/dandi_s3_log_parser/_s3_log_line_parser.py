@@ -50,7 +50,7 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "tls_version",
     "access_point_arn",
 ]
-_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "ip_address"]
+_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "ip_address", "line_index"]
 
 _FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
 _ReducedLogLine = collections.namedtuple("ReducedLogLine", _REDUCED_PATTERN_TO_FIELD_MAPPING)
@@ -121,7 +121,7 @@ def _get_full_log_line(
     *,
     parsed_log_line: list[str],
     log_file_path: pathlib.Path,
-    index: int,
+    line_index: int,
     raw_line: str,
 ) -> _FullLogLine | None:
     """Construct a FullLogLine from a single parsed log line, or dump to error collection file and return None."""
@@ -151,7 +151,7 @@ def _get_full_log_line(
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
 
         with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(f"Line {index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
+            io.write(f"Line {line_index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
 
     return full_log_line
 
@@ -163,8 +163,8 @@ def _append_reduced_log_line(
     bucket: str,
     request_type: str,
     excluded_ips: collections.defaultdict[str, bool],
+    line_index: int,
     log_file_path: pathlib.Path,
-    index: int,
 ) -> None:
     """
     Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
@@ -182,7 +182,8 @@ def _append_reduced_log_line(
         The type of request to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-
+    line_index: int
+        The index of the line in the raw log file.
     """
     bucket = "" if bucket is None else bucket
     excluded_ips = excluded_ips or collections.defaultdict(bool)
@@ -192,7 +193,7 @@ def _append_reduced_log_line(
     full_log_line = _get_full_log_line(
         parsed_log_line=parsed_log_line,
         log_file_path=log_file_path,
-        index=index,
+        line_index=line_index,
         raw_line=raw_line,
     )
 
@@ -226,6 +227,7 @@ def _append_reduced_log_line(
         timestamp=parsed_timestamp,
         bytes_sent=parsed_bytes_sent,
         ip_address=full_log_line.ip_address,
+        line_index=line_index,
     )
 
     reduced_log_lines.append(reduced_log_line)

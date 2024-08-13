@@ -14,6 +14,6 @@ jobs:
   DailyTests:
     uses: ./.github/workflows/testing_dev.yml
     secrets:
-      IPINFO_HASH_SALT: ${{ secrets.IPINFO_HASH_SALT }}
+      IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
       IPINFO_CREDENTIALS: ${{ secrets.IPINFO_CREDENTIALS }}
       CODECOV_CREDENTIALS: ${{ secrets.CODECOV_CREDENTIALS }}
