@@ -2,9 +2,11 @@
 
 import datetime
 import hashlib
+import importlib.metadata
 import ipaddress
+import os
+import pathlib
 import traceback
-from importlib.metadata import version as importlib_version
 
 import ipinfo
 import requests
@@ -14,9 +16,28 @@ from pydantic import FilePath
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
     DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH,
-    IPINFO_CREDENTIALS,
-    IPINFO_HASH_SALT,
 )
+
+
+def get_hash_salt(base_raw_s3_log_folder_path: FilePath) -> str:
+    """
+    Calculate the salt (in hexadecimal encoding) used for IP hashing.
+
+    Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
+
+    Otherwise, it would be fairly easy to iterate over every possible IP address and find the SHA1 of it.
+    """
+    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
+
+    # Retrieve the first line of the first log file (which only we know) and use that as a secure salt
+    first_log_file_path = base_raw_s3_log_folder_path / "2019" / "10" / "01.log"
+
+    with open(file=first_log_file_path) as io:
+        first_line = io.readline()
+
+    hash_salt = hashlib.sha1(string=bytes(first_line, "utf-8"))
+
+    return hash_salt.hexdigest()
 
 
 def _cidr_address_to_ip_range(*, cidr_address: str) -> list[str]:
@@ -85,7 +106,21 @@ def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, st
     if ip_address == "unknown":
         return "unknown"
 
-    ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + IPINFO_HASH_SALT).hexdigest()
+    if "IPINFO_CREDENTIALS" not in os.environ:
+        message = "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
+        raise ValueError(message)  # pragma: no cover
+    ipinfo_credentials = os.environ["IPINFO_CREDENTIALS"]
+
+    if "IPINFO_HASH_SALT" not in os.environ:
+        message = (
+            "The environment variable 'IPINFO_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
+            "To retrieve the value, set a temporary value to this environment variable "
+            "and then use the `get_hash_salt` helper function and set it to the correct value."
+        )
+        raise ValueError(message)  # pragma: no cover
+    ip_hash_salt = bytes.fromhex(os.environ["IP_HASH_SALT"])
+
+    ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
 
     # Early return for speed
     lookup_result = ip_hash_to_region.get(ip_hash)
@@ -95,7 +130,7 @@ def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, st
     # Log errors in IP fetching
     # Lines cannot be covered without testing on a real IP
     try:  # pragma: no cover
-        handler = ipinfo.getHandler(access_token=IPINFO_CREDENTIALS)
+        handler = ipinfo.getHandler(access_token=ipinfo_credentials)
         details = handler.getDetails(ip_address=ip_address)
 
         country = details.details.get("country", None)
@@ -121,7 +156,7 @@ def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, st
         errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
         errors_folder_path.mkdir(exist_ok=True)
 
-        dandi_s3_log_parser_version = importlib_version(distribution_name="dandi_s3_log_parser")
+        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_ipinfo_errors.txt"
 
