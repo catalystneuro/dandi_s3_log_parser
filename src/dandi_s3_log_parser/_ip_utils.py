@@ -111,9 +111,9 @@ def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, st
         raise ValueError(message)  # pragma: no cover
     ipinfo_credentials = os.environ["IPINFO_CREDENTIALS"]
 
-    if "IPINFO_HASH_SALT" not in os.environ:
+    if "IP_HASH_SALT" not in os.environ:
         message = (
-            "The environment variable 'IPINFO_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
+            "The environment variable 'IP_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
             "To retrieve the value, set a temporary value to this environment variable "
             "and then use the `get_hash_salt` helper function and set it to the correct value."
         )
