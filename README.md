@@ -29,7 +29,7 @@ This parser reduces this amount of raw content down to only around 20 GB of cons
 
 These are then additionally mapped only to currently available assets in persistent published Dandiset versions and current drafts, which only comprise around 100 MB of total data.
 
-These small Dandiset-specific summaries are soon to be shared publically.
+These small Dandiset-specific summaries are soon to be shared publicly.
 
 
 
