@@ -48,7 +48,7 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     "--maximum_number_of_workers",
     help="The maximum number of workers to distribute tasks across.",
     required=False,
-    type=click.IntRange(min=1, max=os.cpu_count()),
+    type=click.IntRange(min=1, max=os.cpu_count() * 5),
     default=1,
 )
 @click.option(
