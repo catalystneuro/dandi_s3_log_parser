@@ -130,7 +130,7 @@ def _append_reduced_log_line(
     if full_log_line.bucket != bucket:
         return
 
-    # Collection some quick parsing errors if anything indicates an improper parsing
+    # Apply some minimal validation and contribute any invalidations to error collection
     # These might slow parsing down a bit, but could be important to ensuring accuracy
     errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
     errors_folder_path.mkdir(exist_ok=True)
