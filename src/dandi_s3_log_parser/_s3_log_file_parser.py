@@ -137,8 +137,6 @@ def _get_reduced_and_binned_log_lines(
         A map of all reduced log line content binned by handled asset ID.
     """
     tqdm_kwargs = tqdm_kwargs or dict()
-
-    # Perform I/O read in batches to improve performance
     resolved_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False, mininterval=5.0)
     resolved_tqdm_kwargs.update(tqdm_kwargs)
 

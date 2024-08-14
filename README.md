@@ -56,7 +56,7 @@ parse_all_dandi_raw_s3_logs \
   --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 10 \
-  --maximum_buffer_size_in_mb 1000
+  --maximum_buffer_size_in_mb 10000
 ```
 
 To parse only a single log file at a time, such as in a CRON job:
