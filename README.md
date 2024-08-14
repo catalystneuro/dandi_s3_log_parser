@@ -52,7 +52,7 @@ For example, on Drogon:
 ```bash
 parse_all_dandi_raw_s3_logs \
   --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
-  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_7_13_2024/GET_per_asset_id \
+  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_12_2024/GET_per_asset_id \
   --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 6 \

@@ -52,7 +52,7 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     default=1,
 )
 @click.option(
-    "--maximum_buffer_size_in_MB",
+    "--maximum_buffer_size_in_mb",
     help=""""
 The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the
     source text files.
