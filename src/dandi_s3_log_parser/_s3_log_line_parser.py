@@ -30,8 +30,9 @@ from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 # REST.POST.OBJECT
 # REST.DELETE.OBJECT
 # REST.OPTIONS.PREFLIGHT
+# BATCH.DELETE.OBJECT
 # Longer names are truncated for lower data overhead via direct slicing based on known lengths and separator locations
-_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI"]
+_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI", ".DEL"]
 
 _IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
 for request_type in _KNOWN_REQUEST_TYPES:
@@ -190,7 +191,7 @@ def _append_reduced_log_line(
 def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
     indices = list()
     start = 0
-    max_iter = 1000
+    max_iter = 10**6
     while True and start < max_iter:
         next_index = string.find(substring, start)
         if next_index == -1:  # .find(...) was unable to locate the substring

@@ -91,7 +91,7 @@ def parse_all_dandi_raw_s3_logs(
                 maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
             )
     else:
-        # Create a fresh temporary directory in the home folder and then fresh subfolders for each job
+        # Create a fresh temporary directory in the home folder and then fresh subfolders for each worker
         temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
         temporary_base_folder_path.mkdir(exist_ok=True)
 
@@ -103,63 +103,66 @@ def parse_all_dandi_raw_s3_logs(
         temporary_folder_path = temporary_base_folder_path / task_id
         temporary_folder_path.mkdir(exist_ok=True)
 
-        per_job_temporary_folder_paths = list()
-        for job_index in range(maximum_number_of_workers):
-            per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
-            per_job_temporary_folder_path.mkdir(exist_ok=True)
-            per_job_temporary_folder_paths.append(per_job_temporary_folder_path)
+        per_worker_temporary_folder_paths = list()
+        for worker_index in range(maximum_number_of_workers):
+            per_worker_temporary_folder_path = temporary_folder_path / f"worker_{worker_index}"
+            per_worker_temporary_folder_path.mkdir(exist_ok=True)
+            per_worker_temporary_folder_paths.append(per_worker_temporary_folder_path)
 
-        maximum_buffer_size_in_bytes_per_job = maximum_buffer_size_in_bytes // maximum_number_of_workers
+        maximum_buffer_size_in_bytes_per_worker = maximum_buffer_size_in_bytes // maximum_number_of_workers
 
         futures = []
         with ProcessPoolExecutor(max_workers=maximum_number_of_workers) as executor:
             for raw_s3_log_file_path in daily_raw_s3_log_file_paths:
                 futures.append(
                     executor.submit(
-                        _multi_job_parse_dandi_raw_s3_log,
+                        _multi_worker_parse_dandi_raw_s3_log,
                         maximum_number_of_workers=maximum_number_of_workers,
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         temporary_folder_path=temporary_folder_path,
                         excluded_ips=excluded_ips,
-                        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes_per_job,
+                        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes_per_worker,
                     ),
                 )
 
-            # TODO: figure out how to customize the predicted time remaining as a simpler average (b/c shuffle)
-            # TODO: fix nomenclature in descriptions; maybe also set job index in parallel descriptions?
             progress_bar_iterable = tqdm.tqdm(
                 iterable=as_completed(futures),
-                desc=f"Parsing log files using {maximum_number_of_workers} jobs...",
+                desc=f"Parsing log files using {maximum_number_of_workers} workers...",
                 total=len(daily_raw_s3_log_file_paths),
                 position=0,
                 leave=True,
+                mininterval=2.0,
+                smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
             )
             for future in progress_bar_iterable:
                 future.result()  # This is the call that finally triggers the deployment to the workers
 
         print("\n\nParallel parsing complete!\n\n")
 
-        for per_job_temporary_folder_path in tqdm.tqdm(
-            iterable=per_job_temporary_folder_paths,
-            desc="Merging results across jobs...",
-            total=len(per_job_temporary_folder_paths),
+        for per_worker_temporary_folder_path in tqdm.tqdm(
+            iterable=per_worker_temporary_folder_paths,
+            desc="Merging results across workers...",
+            total=len(per_worker_temporary_folder_paths),
             position=0,
             leave=True,
+            mininterval=2.0,
         ):
-            per_job_parsed_s3_log_file_paths = list(per_job_temporary_folder_path.iterdir())
-            assert len(per_job_parsed_s3_log_file_paths) != 0, f"No files found in {per_job_temporary_folder_path}!"
+            per_worker_parsed_s3_log_file_paths = list(per_worker_temporary_folder_path.iterdir())
+            assert (
+                len(per_worker_parsed_s3_log_file_paths) != 0
+            ), f"No files found in {per_worker_temporary_folder_path}!"
 
-            for per_job_parsed_s3_log_file_path in tqdm.tqdm(
-                iterable=per_job_parsed_s3_log_file_paths,
-                desc="Merging results per job...",
-                total=len(per_job_parsed_s3_log_file_paths),
+            for per_worker_parsed_s3_log_file_path in tqdm.tqdm(
+                iterable=per_worker_parsed_s3_log_file_paths,
+                desc="Merging results per worker...",
+                total=len(per_worker_parsed_s3_log_file_paths),
                 position=1,
                 leave=False,
-                mininterval=3.0,
+                mininterval=2.0,
             ):
-                merged_temporary_file_path = parsed_s3_log_folder_path / per_job_parsed_s3_log_file_path.name
+                merged_temporary_file_path = parsed_s3_log_folder_path / per_worker_parsed_s3_log_file_path.name
 
-                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_job_parsed_s3_log_file_path, header=0)
+                parsed_s3_log = pandas.read_table(filepath_or_buffer=per_worker_parsed_s3_log_file_path, header=0)
 
                 header = False if merged_temporary_file_path.exists() else True
                 parsed_s3_log.to_csv(
@@ -175,7 +178,7 @@ def parse_all_dandi_raw_s3_logs(
 
 # Function cannot be covered because the line calls occur on subprocesses
 # pragma: no cover
-def _multi_job_parse_dandi_raw_s3_log(
+def _multi_worker_parse_dandi_raw_s3_log(
     *,
     maximum_number_of_workers: int,
     raw_s3_log_file_path: pathlib.Path,
@@ -184,7 +187,7 @@ def _multi_job_parse_dandi_raw_s3_log(
     maximum_buffer_size_in_bytes: int,
 ) -> None:
     """
-    A mostly pass-through function to calculate the job index on the worker and target the correct subfolder.
+    A mostly pass-through function to calculate the worker index on the worker and target the correct subfolder.
 
     Also dumps error stack (which is only typically seen by the worker and not sent back to the main stdout pipe)
     to a log file.
@@ -194,8 +197,8 @@ def _multi_job_parse_dandi_raw_s3_log(
 
         asset_id_handler = _get_default_dandi_asset_id_handler()
 
-        job_index = os.getpid() % maximum_number_of_workers
-        per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
+        worker_index = os.getpid() % maximum_number_of_workers
+        per_worker_temporary_folder_path = temporary_folder_path / f"worker_{worker_index}"
 
         # Define error catching stuff as part of the try clause
         # so that if there is a problem within that, it too is caught
@@ -206,16 +209,18 @@ def _multi_job_parse_dandi_raw_s3_log(
         date = datetime.datetime.now().strftime("%y%m%d")
         parallel_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_parallel_errors.txt"
         error_message += (
-            f"Job index {job_index}/{maximum_number_of_workers} parsing {raw_s3_log_file_path} failed due to\n\n"
+            f"Worker index {worker_index}/{maximum_number_of_workers} parsing {raw_s3_log_file_path} failed due to\n\n"
         )
 
         parse_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
-            parsed_s3_log_folder_path=per_job_temporary_folder_path,
+            parsed_s3_log_folder_path=per_worker_temporary_folder_path,
             mode="a",
             excluded_ips=excluded_ips,
             asset_id_handler=asset_id_handler,
-            tqdm_kwargs=dict(position=job_index + 1, leave=False),
+            tqdm_kwargs=dict(
+                position=worker_index + 1, leave=False, desc=f"Parsing line buffers on worker {worker_index}..."
+            ),
             maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         )
     except Exception as exception:
