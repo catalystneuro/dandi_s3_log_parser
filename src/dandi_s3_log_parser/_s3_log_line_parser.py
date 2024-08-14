@@ -150,14 +150,14 @@ def _append_reduced_log_line(
     if _IS_REQUEST_TYPE_KNOWN[handled_request_type] is False:
         message = (
             f"Unexpected request type: '{handled_request_type}' handled from '{full_log_line.operation}' "
-            f"on line {line_index} of file {log_file_path}."
+            f"on line {line_index} of file {log_file_path}.\n\n"
         )
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
 
     timezone = full_log_line.timestamp[-5:] != "+0000"
     if timezone:
-        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`."
+        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
 
