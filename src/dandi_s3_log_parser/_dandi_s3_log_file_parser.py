@@ -125,6 +125,7 @@ def parse_all_dandi_raw_s3_logs(
                     ),
                 )
 
+            # TODO: figure out how to customize the predicted time remaining as a simpler average (b/c shuffle)
             progress_bar_iterable = tqdm.tqdm(
                 iterable=as_completed(futures),
                 desc=f"Parsing log files using {maximum_number_of_workers} jobs...",
