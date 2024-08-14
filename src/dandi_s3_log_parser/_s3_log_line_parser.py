@@ -29,7 +29,7 @@ _KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "OPTI"]
 
 _IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
 for request_type in ["GET", "PUT", "HEAD", "POST", "OPTI"]:
-    _KNOWN_REQUEST_TYPES[request_type] = True
+    _IS_REQUEST_TYPE_KNOWN[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
