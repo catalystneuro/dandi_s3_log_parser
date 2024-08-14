@@ -15,60 +15,16 @@ import collections
 import datetime
 import importlib.metadata
 import pathlib
-import re
 from collections.abc import Callable
 from typing import Literal
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-
-_KNOWN_OPERATION_TYPES = (
-    "REST.GET.OBJECT",
-    "REST.PUT.OBJECT",
-    "REST.HEAD.OBJECT",
-    "REST.POST.OBJECT",
-    "REST.COPY.PART",
-    "REST.COPY.OBJECT_GET",
-    "REST.DELETE.OBJECT",
-    "REST.OPTIONS.PREFLIGHT",
-    "BATCH.DELETE.OBJECT",
-    "WEBSITE.GET.OBJECT",
+from ._globals import (
+    _IS_OPERATION_TYPE_KNOWN,
+    _KNOWN_OPERATION_TYPES,
+    _S3_LOG_REGEX,
+    _FullLogLine,
 )
-
-_IS_OPERATION_TYPE_KNOWN = collections.defaultdict(bool)
-for request_type in _KNOWN_OPERATION_TYPES:
-    _IS_OPERATION_TYPE_KNOWN[request_type] = True
-
-_FULL_PATTERN_TO_FIELD_MAPPING = [
-    "bucket_owner",
-    "bucket",
-    "timestamp",
-    "ip_address",
-    "requester",
-    "request_id",
-    "operation",
-    "asset_id",
-    "request_uri",
-    # "http_version",  # Regex not splitting this from the request_uri...
-    "status_code",
-    "error_code",
-    "bytes_sent",
-    "object_size",
-    "total_time",
-    "turn_around_time",
-    "referrer",
-    "user_agent",
-    "version",
-    "host_id",
-    "sigv",
-    "cipher_suite",
-    "auth_type",
-    "endpoint",
-    "tls_version",
-    "access_point_arn",
-]
-_FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
-
-_S3_LOG_REGEX = re.compile(pattern=r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
 
 
 def _append_reduced_log_line(
@@ -146,11 +102,9 @@ def _append_reduced_log_line(
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
 
-    handled_operation_type = full_log_line.operation
-    if _IS_OPERATION_TYPE_KNOWN[handled_operation_type] is False:
+    if _IS_OPERATION_TYPE_KNOWN[full_log_line.operation] is False:
         message = (
-            f"Unexpected request type: '{handled_operation_type}' handled from '{full_log_line.operation}' "
-            f"on line {line_index} of file {log_file_path}.\n\n"
+            f"Unexpected request type: '{full_log_line.operation}' on line {line_index} of file {log_file_path}.\n\n"
         )
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
@@ -166,7 +120,7 @@ def _append_reduced_log_line(
     if full_log_line.status_code[0] != "2":
         return
 
-    if handled_operation_type != operation_type:
+    if full_log_line.operation != operation_type:
         return
 
     if excluded_ips[full_log_line.ip_address] is True:

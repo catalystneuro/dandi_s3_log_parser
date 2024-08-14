@@ -1,0 +1,35 @@
+import pathlib
+
+import tqdm
+from pydantic import DirectoryPath, FilePath, validate_call
+
+from ._buffered_text_reader import BufferedTextReader
+
+
+@validate_call
+def find_all_known_operation_types(
+    base_raw_s3_log_folder_path: DirectoryPath, excluded_log_files: list[FilePath] | None
+) -> set:
+    excluded_log_files = excluded_log_files or {}
+    excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
+
+    daily_raw_s3_log_file_paths = list(set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files)
+
+    unique_operation_types = set()
+    for raw_s3_log_file_path in tqdm.tqdm(
+        iterable=daily_raw_s3_log_file_paths,
+        desc="Extracting operation types from log files...",
+        position=0,
+        leave=True,
+    ):
+        # The start of each line should be regular enough to reliably slice out just the span of the operation type
+        # (plus some extra bits on the end from irregularly of operation type length)
+        operation_types_per_file = {
+            raw_log_line[136:160].split(" ")[0]
+            for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path)
+            for raw_log_line in buffered_text_reader
+        }
+
+        unique_operation_types.update(operation_types_per_file)
+
+    return unique_operation_types
