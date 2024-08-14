@@ -3,15 +3,12 @@ Primary functions for parsing a single line of a raw S3 log.
 
 The strategy is to...
 
-1) Parse the raw line into a list of strings using a regex pattern.
+1) Parse the raw line into a list of strings using a combination of regex patterns and custom string manipulation.
 2) Construct a FullLogLine object from the parsed line. A collections.namedtuple object is used for performance.
-3) Reduce and map the information from the FullLogLine into a ReducedLogLine object.
-   This uses a lot less memory than the full version.
+3) Reduce and map the information from the FullLogLine into a collections.defaultdict object.
    Some of the mapping operations at this step include...
-      - Identifying the DANDI asset ID from the full blob.
-      - Parsing the timestamp in memory as a datetime.datetime object.
-      - Filtering out log lines from excluded IPs (such as Drogon or GitHub actions).
-      - Converting the full remote IP to a country and region, so it can be saved without violating privacy.
+      - Handling the timestamp in memory as a datetime.datetime object.
+      - Filtering out log lines from excluded IPs.
 """
 
 import collections
@@ -28,11 +25,12 @@ from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 # REST.PUT.OBJECT
 # REST.HEAD.OBJECT
 # REST.POST.OBJECT
+# REST.COPY.PART and REST.COPY.OBJECT_GET
 # REST.DELETE.OBJECT
 # REST.OPTIONS.PREFLIGHT
 # BATCH.DELETE.OBJECT
 # Longer names are truncated for lower data overhead via direct slicing based on known lengths and separator locations
-_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI", ".DEL"]
+_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "COPY", "DELE", "OPTI", ".DEL"]
 
 _IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
 for request_type in _KNOWN_REQUEST_TYPES:

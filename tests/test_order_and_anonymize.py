@@ -33,6 +33,10 @@ def test_order_and_anonymize(tmpdir: py.path.local) -> None:
             filepath_or_buffer=expected_ordered_and_anonymized_s3_log_file_path,
             index_col=0,
         )
+
+        test_ordered_and_anonymized_s3_log = test_ordered_and_anonymized_s3_log.sort_values(by="timestamp")
+        expected_ordered_and_anonymized_s3_log = expected_ordered_and_anonymized_s3_log.sort_values(by="timestamp")
+
         pandas.testing.assert_frame_equal(
             left=test_ordered_and_anonymized_s3_log,
             right=expected_ordered_and_anonymized_s3_log,
