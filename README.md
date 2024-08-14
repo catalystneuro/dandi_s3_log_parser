@@ -44,7 +44,7 @@ parse_all_dandi_raw_s3_logs \
   --excluded_log_files < any log files to skip> \
   --excluded_ips < comma-separated list of known IPs to exclude > \
   --maximum_number_of_workers < number of CPUs to use > \
-  --maximum_buffer_size_in_bytes < approximate amount of RAM to use >
+  --maximum_buffer_size_in_MiB < approximate amount of RAM to use >
 ```
 
 For example, on Drogon:
@@ -56,7 +56,7 @@ parse_all_dandi_raw_s3_logs \
   --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 3 \
-  --maximum_buffer_size_in_bytes 15000000000
+  --maximum_buffer_size_in_MiB 1024
 ```
 
 To parse only a single log file at a time, such as in a CRON job:
