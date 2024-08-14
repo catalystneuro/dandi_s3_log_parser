@@ -19,7 +19,6 @@ import datetime
 import importlib.metadata
 import pathlib
 import re
-import uuid
 from collections.abc import Callable
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
@@ -81,9 +80,10 @@ def _append_reduced_log_line(
     excluded_ips: collections.defaultdict[str, bool],
     line_index: int,
     log_file_path: pathlib.Path,
+    task_id: str,
 ) -> None:
     """
-    Append the `reduced_and_binned_logs` map with informatione extracted from a single raw log line, if it is valid.
+    Append the `reduced_and_binned_logs` map with information extracted from a single raw log line, if it is valid.
 
     Parameters
     ----------
@@ -108,7 +108,9 @@ def _append_reduced_log_line(
     line_index: int
         The index of the line in the raw log file.
     log_file_path: pathlib.Path
-        The path to the log file being parsed; attached for logging purposes.
+        The path to the log file being parsed; attached for error collection purposes.
+    task_id: str
+        A unique task ID to ensure that error collection files are unique when parallelizing to avoid race conditions.
     """
     parsed_log_line = _parse_s3_log_line(raw_line=raw_line)
 
@@ -117,6 +119,7 @@ def _append_reduced_log_line(
         log_file_path=log_file_path,
         line_index=line_index,
         raw_line=raw_line,
+        task_id=task_id,
     )
 
     if full_log_line is None:
@@ -133,7 +136,6 @@ def _append_reduced_log_line(
 
     dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
     date = datetime.datetime.now().strftime("%y%m%d")
-    task_id = str(uuid.uuid4())[:6]  # Assign unique task ID to line errors files just in case of race conditions
     lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
     if not full_log_line.status_code.isdigit():
@@ -257,6 +259,7 @@ def _get_full_log_line(
     log_file_path: pathlib.Path,
     line_index: int,
     raw_line: str,
+    task_id: str,
 ) -> _FullLogLine | None:
     """Construct a FullLogLine from a single parsed log line, or dump to error collection file and return None."""
     full_log_line = None
@@ -282,7 +285,6 @@ def _get_full_log_line(
 
         dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
-        task_id = str(uuid.uuid4())[:6]  # Assign unique task ID to line errors files just in case of race conditions
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
         # TODO: automatically attempt to anonymize any detectable IP address in the raw line by replacing with 192.0.2.0

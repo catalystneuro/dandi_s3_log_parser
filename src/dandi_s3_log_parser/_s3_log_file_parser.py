@@ -2,6 +2,7 @@
 
 import collections
 import pathlib
+import uuid
 from collections.abc import Callable
 from typing import Literal
 
@@ -152,6 +153,7 @@ def _get_reduced_and_binned_log_lines(
         **resolved_tqdm_kwargs,
     )
 
+    task_id = str(uuid.uuid4())[:5]
     per_buffer_index = 0
     for buffered_raw_lines in progress_bar_iterator:
         for index, raw_line in enumerate(buffered_raw_lines):
@@ -166,6 +168,7 @@ def _get_reduced_and_binned_log_lines(
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
                 line_index=line_index,
+                task_id=task_id,
             )
         per_buffer_index += index
 
