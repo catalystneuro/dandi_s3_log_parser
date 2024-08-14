@@ -34,7 +34,7 @@ from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 _KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI"]
 
 _IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
-for request_type in ["GET", "PUT", "HEAD", "POST", "OPTI"]:
+for request_type in _KNOWN_REQUEST_TYPES:
     _IS_REQUEST_TYPE_KNOWN[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
