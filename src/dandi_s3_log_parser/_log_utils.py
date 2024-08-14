@@ -11,7 +11,7 @@ from ._buffered_text_reader import BufferedTextReader
 def find_all_known_operation_types(
     base_raw_s3_log_folder_path: DirectoryPath,
     excluded_log_files: list[FilePath] | None,
-    max_files: int | None = 100,
+    max_files: int | None = None,
 ) -> set:
     base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
     excluded_log_files = excluded_log_files or {}
@@ -27,13 +27,14 @@ def find_all_known_operation_types(
         position=0,
         leave=True,
     ):
-        operation_types_per_file = {
-            field[7]
-            for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path)
-            for raw_log_line in buffered_text_reader
-            if len((field := raw_log_line[:500].split(" "))) > 7
-        }
-
-        unique_operation_types.update(operation_types_per_file)
+        for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path):
+            slice_bound = 200
+            for raw_log_line in buffered_text_reader:
+                fields = raw_log_line[:slice_bound].split(" ")
+                while len(fields) < 7:
+                    slice_bound += 100
+                    fields = raw_log_line[:slice_bound].split(" ")
+                field = fields[7]
+                unique_operation_types.add(field)
 
     return unique_operation_types
