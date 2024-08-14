@@ -32,7 +32,7 @@ def parse_all_dandi_raw_s3_logs(
     excluded_log_files: list[FilePath] | None = None,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     exclude_github_ips: bool = True,
-    maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count() * 5, default=1),
+    maximum_number_of_workers: int = Field(ge=1, default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
