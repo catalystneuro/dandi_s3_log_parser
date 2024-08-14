@@ -21,7 +21,7 @@ def parse_raw_s3_log(
     parsed_s3_log_folder_path: str | pathlib.Path,
     mode: Literal["w", "a"] = "a",
     bucket: str | None = None,
-    operation_type: Literal[_KNOWN_OPERATION_TYPES] = "REST.GET",
+    operation_type: Literal[_KNOWN_OPERATION_TYPES] = "REST.GET.OBJECT",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
