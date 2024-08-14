@@ -19,12 +19,16 @@ import datetime
 import importlib.metadata
 import pathlib
 import re
+import uuid
 from collections.abc import Callable
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 
-_KNOWN_REQUEST_TYPES = collections.defaultdict(bool)
-for request_type in ["GET", "PUT", "HEAD"]:
+_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "OPTI"]
+# Last 'OPTI' is for those of the form 'REST.OPTIONS.PREFLIGHT'
+
+_IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
+for request_type in ["GET", "PUT", "HEAD", "POST", "OPTI"]:
     _KNOWN_REQUEST_TYPES[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
@@ -115,26 +119,39 @@ def _append_reduced_log_line(
     if full_log_line.bucket != bucket:
         return
 
-    # Raise some quick parsing errors if anything indicates an improper parsing
+    # Collection some quick parsing errors if anything indicates an improper parsing
     # These might slow parsing down a bit, but could be important to ensuring accuracy
+    errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+    errors_folder_path.mkdir(exist_ok=True)
+
+    dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
+    date = datetime.datetime.now().strftime("%y%m%d")
+    task_id = str(uuid.uuid4())[:6]  # Assign unique task ID to line errors files just in case of race conditions
+    lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
+
     if not full_log_line.status_code.isdigit():
-        message = f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}."
-        raise ValueError(message)
+        message = (
+            f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}.\n\n"
+        )
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
 
     # An expected operation string is "REST.GET.OBJECT"
     operation_slice = slice(5, 8) if full_log_line.operation[8] == "." else slice(5, 9)
     handled_request_type = full_log_line.operation[operation_slice]
-    if _KNOWN_REQUEST_TYPES[handled_request_type] is False:
+    if _IS_REQUEST_TYPE_KNOWN[handled_request_type] is False:
         message = (
             f"Unexpected request type: '{handled_request_type}' handled from '{full_log_line.operation}' "
             f"on line {line_index} of file {log_file_path}."
         )
-        raise ValueError(message)
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
 
     timezone = full_log_line.timestamp[-5:] != "+0000"
     if timezone:
         message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`."
-        raise ValueError(message)
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
 
     # More early skip conditions
     # Only accept 200-block status codes
@@ -259,7 +276,8 @@ def _get_full_log_line(
 
         dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
-        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
+        task_id = str(uuid.uuid4())[:6]  # Assign unique task ID to line errors files just in case of race conditions
+        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
         # TODO: automatically attempt to anonymize any detectable IP address in the raw line by replacing with 192.0.2.0
         with open(file=lines_errors_file_path, mode="a") as io:
