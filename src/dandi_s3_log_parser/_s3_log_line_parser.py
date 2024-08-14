@@ -23,9 +23,20 @@ from collections.abc import Callable
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 
-_KNOWN_REQUEST_TYPES = collections.defaultdict(bool)
-for request_type in ["GET", "PUT", "HEAD"]:
-    _KNOWN_REQUEST_TYPES[request_type] = True
+# Known forms:
+# REST.GET.OBJECT
+# REST.PUT.OBJECT
+# REST.HEAD.OBJECT
+# REST.POST.OBJECT
+# REST.DELETE.OBJECT
+# REST.OPTIONS.PREFLIGHT
+# BATCH.DELETE.OBJECT
+# Longer names are truncated for lower data overhead via direct slicing based on known lengths and separator locations
+_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI", ".DEL"]
+
+_IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
+for request_type in _KNOWN_REQUEST_TYPES:
+    _IS_REQUEST_TYPE_KNOWN[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
@@ -70,9 +81,10 @@ def _append_reduced_log_line(
     excluded_ips: collections.defaultdict[str, bool],
     line_index: int,
     log_file_path: pathlib.Path,
+    task_id: str,
 ) -> None:
     """
-    Append the `reduced_and_binned_logs` map with informatione extracted from a single raw log line, if it is valid.
+    Append the `reduced_and_binned_logs` map with information extracted from a single raw log line, if it is valid.
 
     Parameters
     ----------
@@ -97,7 +109,9 @@ def _append_reduced_log_line(
     line_index: int
         The index of the line in the raw log file.
     log_file_path: pathlib.Path
-        The path to the log file being parsed; attached for logging purposes.
+        The path to the log file being parsed; attached for error collection purposes.
+    task_id: str
+        A unique task ID to ensure that error collection files are unique when parallelizing to avoid race conditions.
     """
     parsed_log_line = _parse_s3_log_line(raw_line=raw_line)
 
@@ -106,6 +120,7 @@ def _append_reduced_log_line(
         log_file_path=log_file_path,
         line_index=line_index,
         raw_line=raw_line,
+        task_id=task_id,
     )
 
     if full_log_line is None:
@@ -115,26 +130,37 @@ def _append_reduced_log_line(
     if full_log_line.bucket != bucket:
         return
 
-    # Raise some quick parsing errors if anything indicates an improper parsing
+    # Apply some minimal validation and contribute any invalidations to error collection
     # These might slow parsing down a bit, but could be important to ensuring accuracy
-    if not full_log_line.status_code.isdigit():
-        message = f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}."
-        raise ValueError(message)
+    errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+    errors_folder_path.mkdir(exist_ok=True)
 
-    # An expected operation string is "REST.GET.OBJECT"
+    dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
+    date = datetime.datetime.now().strftime("%y%m%d")
+    lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
+
+    if not full_log_line.status_code.isdigit():
+        message = (
+            f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}.\n\n"
+        )
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
+
     operation_slice = slice(5, 8) if full_log_line.operation[8] == "." else slice(5, 9)
     handled_request_type = full_log_line.operation[operation_slice]
-    if _KNOWN_REQUEST_TYPES[handled_request_type] is False:
+    if _IS_REQUEST_TYPE_KNOWN[handled_request_type] is False:
         message = (
             f"Unexpected request type: '{handled_request_type}' handled from '{full_log_line.operation}' "
-            f"on line {line_index} of file {log_file_path}."
+            f"on line {line_index} of file {log_file_path}.\n\n"
         )
-        raise ValueError(message)
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
 
     timezone = full_log_line.timestamp[-5:] != "+0000"
     if timezone:
-        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`."
-        raise ValueError(message)
+        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
+        with open(file=lines_errors_file_path, mode="a") as io:
+            io.write(message)
 
     # More early skip conditions
     # Only accept 200-block status codes
@@ -165,7 +191,7 @@ def _append_reduced_log_line(
 def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
     indices = list()
     start = 0
-    max_iter = 1000
+    max_iter = 10**6
     while True and start < max_iter:
         next_index = string.find(substring, start)
         if next_index == -1:  # .find(...) was unable to locate the substring
@@ -234,6 +260,7 @@ def _get_full_log_line(
     log_file_path: pathlib.Path,
     line_index: int,
     raw_line: str,
+    task_id: str,
 ) -> _FullLogLine | None:
     """Construct a FullLogLine from a single parsed log line, or dump to error collection file and return None."""
     full_log_line = None
@@ -259,7 +286,7 @@ def _get_full_log_line(
 
         dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
         date = datetime.datetime.now().strftime("%y%m%d")
-        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
+        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
         # TODO: automatically attempt to anonymize any detectable IP address in the raw line by replacing with 192.0.2.0
         with open(file=lines_errors_file_path, mode="a") as io:
