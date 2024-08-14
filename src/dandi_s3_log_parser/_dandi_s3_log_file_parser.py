@@ -28,7 +28,7 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path: DirectoryPath,
     excluded_log_files: list[FilePath] | None = None,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
-    maximum_number_of_workers: int = Field(ge=1, le=os.cpu_count() * 5, default=1),
+    maximum_number_of_workers: int = Field(ge=1, default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
