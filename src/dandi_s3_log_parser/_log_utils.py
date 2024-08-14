@@ -28,7 +28,7 @@ def find_all_known_operation_types(
         leave=True,
     ):
         operation_types_per_file = {
-            raw_log_line[:180].split(" ")[7]
+            raw_log_line[:250].split(" ")[7]
             for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path)
             for raw_log_line in buffered_text_reader
         }
