@@ -219,7 +219,7 @@ def _multi_worker_parse_dandi_raw_s3_log(
             excluded_ips=excluded_ips,
             asset_id_handler=asset_id_handler,
             tqdm_kwargs=dict(
-                position=worker_index + 1, leave=False, desc=f"Parsing line buffers on worker {worker_index}..."
+                position=worker_index + 1, leave=False, desc=f"Parsing line buffers on worker {worker_index+1}..."
             ),
             maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         )
