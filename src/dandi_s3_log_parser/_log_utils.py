@@ -1,4 +1,5 @@
 import pathlib
+import random
 
 import tqdm
 from pydantic import DirectoryPath, FilePath, validate_call
@@ -17,6 +18,7 @@ def find_all_known_operation_types(
     excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
 
     daily_raw_s3_log_file_paths = list(set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files)
+    random.shuffle(daily_raw_s3_log_file_paths)
 
     unique_operation_types = set()
     for raw_s3_log_file_path in tqdm.tqdm(
