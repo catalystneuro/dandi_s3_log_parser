@@ -18,9 +18,6 @@ import tqdm
 from pydantic import DirectoryPath, Field, FilePath, validate_call
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-from ._ip_utils import (
-    _get_latest_github_ip_ranges,
-)
 from ._s3_log_file_parser import parse_raw_s3_log
 
 
@@ -31,7 +28,6 @@ def parse_all_dandi_raw_s3_logs(
     parsed_s3_log_folder_path: DirectoryPath,
     excluded_log_files: list[FilePath] | None = None,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
-    exclude_github_ips: bool = True,
     maximum_number_of_workers: int = Field(ge=1, default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
@@ -57,8 +53,6 @@ def parse_all_dandi_raw_s3_logs(
         A list of log file paths to exclude from parsing.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    exclude_github_ips : bool, default: True
-        Include all GitHub action IP addresses in the `excluded_ips`.
     maximum_number_of_workers : int, default: 1
         The maximum number of workers to distribute tasks across.
     maximum_buffer_size_in_bytes : int, default: 4 GB
@@ -74,13 +68,7 @@ def parse_all_dandi_raw_s3_logs(
     excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
     excluded_ips = excluded_ips or collections.defaultdict(bool)
 
-    if exclude_github_ips:
-        for github_ip in _get_latest_github_ip_ranges():
-            excluded_ips[github_ip] = True
-
-    def asset_id_handler(*, raw_asset_id: str) -> str:
-        split_by_slash = raw_asset_id.split("/")
-        return split_by_slash[0] + "_" + split_by_slash[-1]
+    asset_id_handler = _get_default_dandi_asset_id_handler()
 
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     daily_raw_s3_log_file_paths = set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files
@@ -98,7 +86,6 @@ def parse_all_dandi_raw_s3_logs(
                 parsed_s3_log_folder_path=parsed_s3_log_folder_path,
                 mode="a",
                 excluded_ips=excluded_ips,
-                exclude_github_ips=False,  # Already included in list so avoid repeated construction
                 asset_id_handler=asset_id_handler,
                 tqdm_kwargs=dict(position=1, leave=False),
                 maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
@@ -203,10 +190,7 @@ def _multi_job_parse_dandi_raw_s3_log(
     try:
         error_message = ""
 
-        def asset_id_handler(*, raw_asset_id: str) -> str:
-            """Apparently callables, even simple built-in ones, cannot be pickled."""
-            split_by_slash = raw_asset_id.split("/")
-            return split_by_slash[0] + "_" + split_by_slash[-1]
+        asset_id_handler = _get_default_dandi_asset_id_handler()
 
         job_index = os.getpid() % maximum_number_of_workers
         per_job_temporary_folder_path = temporary_folder_path / f"job_{job_index}"
@@ -228,7 +212,6 @@ def _multi_job_parse_dandi_raw_s3_log(
             parsed_s3_log_folder_path=per_job_temporary_folder_path,
             mode="a",
             excluded_ips=excluded_ips,
-            exclude_github_ips=False,  # Already included in list so avoid repeated construction
             asset_id_handler=asset_id_handler,
             tqdm_kwargs=dict(position=job_index + 1, leave=False),
             maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
@@ -245,7 +228,6 @@ def parse_dandi_raw_s3_log(
     parsed_s3_log_folder_path: str | pathlib.Path,
     mode: Literal["w", "a"] = "a",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
-    exclude_github_ips: bool = True,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
@@ -272,8 +254,6 @@ def parse_dandi_raw_s3_log(
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    exclude_github_ips : bool, default: True
-        Include all GitHub action IP addresses in the `excluded_ips`.
     asset_id_handler : callable, optional
         If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
         translate into nested directory paths) then define a function of the following form:
@@ -290,23 +270,11 @@ def parse_dandi_raw_s3_log(
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
+    asset_id_handler = asset_id_handler or _get_default_dandi_asset_id_handler()
     tqdm_kwargs = tqdm_kwargs or dict()
 
     bucket = "dandiarchive"
     request_type = "GET"
-
-    # Form a lookup for IP addresses to exclude; much faster than asking 'if in' a list on each iteration
-    # Exclude GitHub actions, which are responsible for running health checks on archive which bloat the logs
-    excluded_ips = excluded_ips or collections.defaultdict(bool)
-    if exclude_github_ips:
-        for github_ip in _get_latest_github_ip_ranges():
-            excluded_ips[github_ip] = True
-
-    if asset_id_handler is None:
-
-        def asset_id_handler(*, raw_asset_id: str) -> str:
-            split_by_slash = raw_asset_id.split("/")
-            return split_by_slash[0] + "_" + split_by_slash[-1]
 
     parse_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
@@ -319,3 +287,11 @@ def parse_dandi_raw_s3_log(
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
+
+
+def _get_default_dandi_asset_id_handler() -> Callable:
+    def asset_id_handler(*, raw_asset_id: str) -> str:
+        split_by_slash = raw_asset_id.split("/")
+        return split_by_slash[0] + "_" + split_by_slash[-1]
+
+    return asset_id_handler
