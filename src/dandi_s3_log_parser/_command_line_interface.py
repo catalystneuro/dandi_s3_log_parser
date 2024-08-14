@@ -52,9 +52,9 @@ NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
     default=1,
 )
 @click.option(
-    "--maximum_buffer_size_in_MiB",
+    "--maximum_buffer_size_in_MB",
     help=""""
-The theoretical maximum amount of RAM (in MiB) to use on each buffer iteration when reading from the
+The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the
     source text files.
     Actual total RAM usage will be higher due to overhead and caching.
     Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
@@ -62,7 +62,7 @@ The theoretical maximum amount of RAM (in MiB) to use on each buffer iteration w
 """,
     required=False,
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
-    default=1_024,  # 1 GiB recommended
+    default=1_000,  # 1 GB recommended
 )
 def parse_all_dandi_raw_s3_logs_cli(
     base_raw_s3_log_folder_path: str,
