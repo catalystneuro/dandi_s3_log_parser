@@ -19,8 +19,13 @@ import datetime
 import importlib.metadata
 import pathlib
 import re
+from collections.abc import Callable
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
+
+_KNOWN_REQUEST_TYPES = collections.defaultdict(bool)
+for request_type in ["GET", "PUT", "HEAD"]:
+    _KNOWN_REQUEST_TYPES[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
@@ -50,23 +55,129 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "tls_version",
     "access_point_arn",
 ]
-_REDUCED_PATTERN_TO_FIELD_MAPPING = ["asset_id", "timestamp", "bytes_sent", "ip_address", "line_index"]
-
 _FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
-_ReducedLogLine = collections.namedtuple("ReducedLogLine", _REDUCED_PATTERN_TO_FIELD_MAPPING)
 
 _S3_LOG_REGEX = re.compile(pattern=r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
+
+
+def _append_reduced_log_line(
+    *,
+    raw_line: str,
+    reduced_and_binned_logs: collections.defaultdict[str, dict[str, list[str | int]]],
+    asset_id_handler: Callable,
+    bucket: str,
+    request_type: str,
+    excluded_ips: collections.defaultdict[str, bool],
+    line_index: int,
+    log_file_path: pathlib.Path,
+) -> None:
+    """
+    Append the `reduced_and_binned_logs` map with informatione extracted from a single raw log line, if it is valid.
+
+    Parameters
+    ----------
+    raw_line : string
+        A single line from the raw S3 log file.
+    reduced_and_binned_logs : collections.defaultdict
+        A map of reduced log line content binned by handled asset ID.
+    asset_id_handler : callable, optional
+        If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
+        translate into nested directory paths) then define a function of the following form:
+
+        # For example
+        def asset_id_handler(*, raw_asset_id: str) -> str:
+            split_by_slash = raw_asset_id.split("/")
+            return split_by_slash[0] + "_" + split_by_slash[-1]
+    bucket : string
+        Only parse and return lines that match this bucket string.
+    request_type : string
+        The type of request to filter for.
+    excluded_ips : collections.defaultdict of strings to booleans
+        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    line_index: int
+        The index of the line in the raw log file.
+    log_file_path: pathlib.Path
+        The path to the log file being parsed; attached for logging purposes.
+    """
+    parsed_log_line = _parse_s3_log_line(raw_line=raw_line)
+
+    full_log_line = _get_full_log_line(
+        parsed_log_line=parsed_log_line,
+        log_file_path=log_file_path,
+        line_index=line_index,
+        raw_line=raw_line,
+    )
+
+    if full_log_line is None:
+        return
+
+    # Various early skip conditions
+    if full_log_line.bucket != bucket:
+        return
+
+    # Raise some quick parsing errors if anything indicates an improper parsing
+    # These might slow parsing down a bit, but could be important to ensuring accuracy
+    if not full_log_line.status_code.isdigit():
+        message = f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}."
+        raise ValueError(message)
+
+    # An expected operation string is "REST.GET.OBJECT"
+    operation_slice = slice(5, 8) if full_log_line.operation[8] == "." else slice(5, 9)
+    handled_request_type = full_log_line.operation[operation_slice]
+    if _KNOWN_REQUEST_TYPES[handled_request_type] is False:
+        message = (
+            f"Unexpected request type: '{handled_request_type}' handled from '{full_log_line.operation}' "
+            f"on line {line_index} of file {log_file_path}."
+        )
+        raise ValueError(message)
+
+    timezone = full_log_line.timestamp[-5:] != "+0000"
+    if timezone:
+        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`."
+        raise ValueError(message)
+
+    # More early skip conditions
+    # Only accept 200-block status codes
+    if full_log_line.status_code[0] != "2":
+        return
+
+    if handled_request_type != request_type:
+        return
+
+    if excluded_ips[full_log_line.ip_address] is True:
+        return
+
+    # All early skip conditions done; the line is parsed so bin the reduced information by handled asset ID
+    handled_asset_id = asset_id_handler(raw_asset_id=full_log_line.asset_id)
+    handled_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
+    handled_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
+
+    reduced_and_binned_logs[handled_asset_id] = reduced_and_binned_logs.get(
+        handled_asset_id,
+        collections.defaultdict(list),
+    )
+    reduced_and_binned_logs[handled_asset_id]["timestamp"].append(handled_timestamp)
+    reduced_and_binned_logs[handled_asset_id]["bytes_sent"].append(handled_bytes_sent)
+    reduced_and_binned_logs[handled_asset_id]["ip_address"].append(full_log_line.ip_address)
+    reduced_and_binned_logs[handled_asset_id]["line_index"].append(line_index)
 
 
 def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
     indices = list()
     start = 0
-    while True:
+    max_iter = 1000
+    while True and start < max_iter:
         next_index = string.find(substring, start)
         if next_index == -1:  # .find(...) was unable to locate the substring
             break
         indices.append(next_index)
         start = next_index + 1
+
+    if start >= max_iter:
+        message = (
+            f"Exceeded maximum iterations in `_find_all_possible_substring_indices` on `{string=}` with `{substring=}`."
+        )
+        raise StopIteration(message)
 
     return indices
 
@@ -150,84 +261,8 @@ def _get_full_log_line(
         date = datetime.datetime.now().strftime("%y%m%d")
         lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_lines_errors.txt"
 
+        # TODO: automatically attempt to anonymize any detectable IP address in the raw line by replacing with 192.0.2.0
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(f"Line {line_index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
 
     return full_log_line
-
-
-def _append_reduced_log_line(
-    *,
-    raw_line: str,
-    reduced_log_lines: list[_ReducedLogLine],
-    bucket: str,
-    request_type: str,
-    excluded_ips: collections.defaultdict[str, bool],
-    line_index: int,
-    log_file_path: pathlib.Path,
-) -> None:
-    """
-    Append the `reduced_log_lines` list with a ReducedLogLine constructed from a single raw log line, if it is valid.
-
-    Parameters
-    ----------
-    raw_line : string
-        A single line from the raw S3 log file.
-    reduced_log_lines : list of ReducedLogLine
-        The list of ReducedLogLine objects to mutate in place.
-        This is done to reduce overhead of copying/returning items in-memory via a return-based approach.
-    bucket : string
-        Only parse and return lines that match this bucket string.
-    request_type : string
-        The type of request to filter for.
-    excluded_ips : collections.defaultdict of strings to booleans
-        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    line_index: int
-        The index of the line in the raw log file.
-    """
-    bucket = "" if bucket is None else bucket
-    excluded_ips = excluded_ips or collections.defaultdict(bool)
-
-    parsed_log_line = _parse_s3_log_line(raw_line=raw_line)
-
-    full_log_line = _get_full_log_line(
-        parsed_log_line=parsed_log_line,
-        log_file_path=log_file_path,
-        line_index=line_index,
-        raw_line=raw_line,
-    )
-
-    if full_log_line is None:
-        return
-
-    # Various early skip conditions
-    if full_log_line.bucket != bucket:
-        return
-
-    # Skip all non-success status codes (those in the 200 block)
-    if full_log_line.status_code[0] != "2":
-        return
-
-    # Derived from operation string, e.g., "REST.GET.OBJECT"
-    parsed_request_type = full_log_line.operation.split(".")[1]
-    if parsed_request_type != request_type:
-        return
-
-    if excluded_ips[full_log_line.ip_address] is True:
-        return
-
-    assert (
-        full_log_line.timestamp[-5:] == "+0000"
-    ), f"Unexpected time shift attached to log! Have always seen '+0000', found '{full_log_line.timestamp[-5:]}'."
-
-    parsed_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S")
-    parsed_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
-    reduced_log_line = _ReducedLogLine(
-        asset_id=full_log_line.asset_id,
-        timestamp=parsed_timestamp,
-        bytes_sent=parsed_bytes_sent,
-        ip_address=full_log_line.ip_address,
-        line_index=line_index,
-    )
-
-    reduced_log_lines.append(reduced_log_line)
