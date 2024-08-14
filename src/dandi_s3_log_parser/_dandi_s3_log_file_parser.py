@@ -281,14 +281,14 @@ def parse_dandi_raw_s3_log(
     tqdm_kwargs = tqdm_kwargs or dict()
 
     bucket = "dandiarchive"
-    request_type = "GET"
+    operation_type = "REST.GET.OBJECT"
 
     parse_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         parsed_s3_log_folder_path=parsed_s3_log_folder_path,
         mode=mode,
         bucket=bucket,
-        request_type=request_type,
+        operation_type=operation_type,
         excluded_ips=excluded_ips,
         asset_id_handler=asset_id_handler,
         tqdm_kwargs=tqdm_kwargs,

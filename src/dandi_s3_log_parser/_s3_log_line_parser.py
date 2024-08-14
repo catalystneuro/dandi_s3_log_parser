@@ -17,24 +17,26 @@ import importlib.metadata
 import pathlib
 import re
 from collections.abc import Callable
+from typing import Literal
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 
-# Known forms:
-# REST.GET.OBJECT
-# REST.PUT.OBJECT
-# REST.HEAD.OBJECT
-# REST.POST.OBJECT
-# REST.COPY.PART and REST.COPY.OBJECT_GET
-# REST.DELETE.OBJECT
-# REST.OPTIONS.PREFLIGHT
-# BATCH.DELETE.OBJECT
-# Longer names are truncated for lower data overhead via direct slicing based on known lengths and separator locations
-_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "COPY", "DELE", "OPTI", ".DEL"]
+_KNOWN_OPERATION_TYPES = (
+    "REST.GET.OBJECT",
+    "REST.PUT.OBJECT",
+    "REST.HEAD.OBJECT",
+    "REST.POST.OBJECT",
+    "REST.COPY.PART",
+    "REST.COPY.OBJECT_GET",
+    "REST.DELETE.OBJECT",
+    "REST.OPTIONS.PREFLIGHT",
+    "BATCH.DELETE.OBJECT",
+    "WEBSITE.GET.OBJECT",
+)
 
-_IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
-for request_type in _KNOWN_REQUEST_TYPES:
-    _IS_REQUEST_TYPE_KNOWN[request_type] = True
+_IS_OPERATION_TYPE_KNOWN = collections.defaultdict(bool)
+for request_type in _KNOWN_OPERATION_TYPES:
+    _IS_OPERATION_TYPE_KNOWN[request_type] = True
 
 _FULL_PATTERN_TO_FIELD_MAPPING = [
     "bucket_owner",
@@ -75,7 +77,7 @@ def _append_reduced_log_line(
     reduced_and_binned_logs: collections.defaultdict[str, dict[str, list[str | int]]],
     asset_id_handler: Callable,
     bucket: str,
-    request_type: str,
+    operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
     line_index: int,
     log_file_path: pathlib.Path,
@@ -100,8 +102,8 @@ def _append_reduced_log_line(
             return split_by_slash[0] + "_" + split_by_slash[-1]
     bucket : string
         Only parse and return lines that match this bucket string.
-    request_type : string
-        The type of request to filter for.
+    operation_type : string
+        The type of operation to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     line_index: int
@@ -144,11 +146,10 @@ def _append_reduced_log_line(
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
 
-    operation_slice = slice(5, 8) if full_log_line.operation[8] == "." else slice(5, 9)
-    handled_request_type = full_log_line.operation[operation_slice]
-    if _IS_REQUEST_TYPE_KNOWN[handled_request_type] is False:
+    handled_operation_type = full_log_line.operation
+    if _IS_OPERATION_TYPE_KNOWN[handled_operation_type] is False:
         message = (
-            f"Unexpected request type: '{handled_request_type}' handled from '{full_log_line.operation}' "
+            f"Unexpected request type: '{handled_operation_type}' handled from '{full_log_line.operation}' "
             f"on line {line_index} of file {log_file_path}.\n\n"
         )
         with open(file=lines_errors_file_path, mode="a") as io:
@@ -165,7 +166,7 @@ def _append_reduced_log_line(
     if full_log_line.status_code[0] != "2":
         return
 
-    if handled_request_type != request_type:
+    if handled_operation_type != operation_type:
         return
 
     if excluded_ips[full_log_line.ip_address] is True:

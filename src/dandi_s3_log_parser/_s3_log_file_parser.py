@@ -8,18 +8,20 @@ from typing import Literal
 
 import pandas
 import tqdm
+from pydantic import validate_call
 
 from ._buffered_text_reader import BufferedTextReader
-from ._s3_log_line_parser import _append_reduced_log_line
+from ._s3_log_line_parser import _KNOWN_OPERATION_TYPES, _append_reduced_log_line
 
 
+@validate_call
 def parse_raw_s3_log(
     *,
     raw_s3_log_file_path: str | pathlib.Path,
     parsed_s3_log_folder_path: str | pathlib.Path,
     mode: Literal["w", "a"] = "a",
     bucket: str | None = None,
-    request_type: Literal["GET", "PUT"] = "GET",
+    operation_type: Literal[_KNOWN_OPERATION_TYPES] = "REST.GET.OBJECT",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
@@ -47,8 +49,8 @@ def parse_raw_s3_log(
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
     bucket : str
         Only parse and return lines that match this bucket.
-    request_type : str, default: "GET"
-        The type of request to filter for.
+    operation_type : str, default: "REST.GET"
+        The type of operation to filter for.
     excluded_ips : collections.defaultdict of strings to booleans, optional
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     asset_id_handler : callable, optional
@@ -79,7 +81,7 @@ def parse_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         asset_id_handler=asset_id_handler,
         bucket=bucket,
-        request_type=request_type,
+        operation_type=operation_type,
         excluded_ips=excluded_ips,
         tqdm_kwargs=tqdm_kwargs,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
@@ -99,7 +101,7 @@ def _get_reduced_and_binned_log_lines(
     raw_s3_log_file_path: pathlib.Path,
     asset_id_handler: Callable,
     bucket: str,
-    request_type: Literal["GET", "PUT"],
+    operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
     tqdm_kwargs: dict,
     maximum_buffer_size_in_bytes: int,
@@ -121,8 +123,8 @@ def _get_reduced_and_binned_log_lines(
             return split_by_slash[0] + "_" + split_by_slash[-1]
     bucket : str
         Only parse and return lines that match this bucket.
-    request_type : str
-        The type of request to filter for.
+    operation_type : str
+        The type of operation to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
     tqdm_kwargs : dict, optional
@@ -163,7 +165,7 @@ def _get_reduced_and_binned_log_lines(
                 reduced_and_binned_logs=reduced_and_binned_logs,
                 asset_id_handler=asset_id_handler,
                 bucket=bucket,
-                request_type=request_type,
+                operation_type=operation_type,
                 excluded_ips=excluded_ips,
                 log_file_path=raw_s3_log_file_path,
                 line_index=line_index,
