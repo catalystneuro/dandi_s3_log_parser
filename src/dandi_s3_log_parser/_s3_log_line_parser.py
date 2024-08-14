@@ -24,8 +24,15 @@ from collections.abc import Callable
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 
-_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "OPTI"]
-# Last 'OPTI' is for those of the form 'REST.OPTIONS.PREFLIGHT'
+# Known forms:
+# REST.GET.OBJECT
+# REST.PUT.OBJECT
+# REST.HEAD.OBJECT
+# REST.POST.OBJECT
+# REST.DELETE.OBJECT
+# REST.OPTIONS.PREFLIGHT
+# Longer names are truncated for lower data overhead via direct slicing based on known lengths and separator locations
+_KNOWN_REQUEST_TYPES = ["GET", "PUT", "HEAD", "POST", "DELE", "OPTI"]
 
 _IS_REQUEST_TYPE_KNOWN = collections.defaultdict(bool)
 for request_type in ["GET", "PUT", "HEAD", "POST", "OPTI"]:
@@ -136,7 +143,6 @@ def _append_reduced_log_line(
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
 
-    # An expected operation string is "REST.GET.OBJECT"
     operation_slice = slice(5, 8) if full_log_line.operation[8] == "." else slice(5, 9)
     handled_request_type = full_log_line.operation[operation_slice]
     if _IS_REQUEST_TYPE_KNOWN[handled_request_type] is False:
