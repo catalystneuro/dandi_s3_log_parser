@@ -26,6 +26,7 @@ def find_all_known_operation_types(
         desc="Extracting operation types from log files...",
         position=0,
         leave=True,
+        smoothing=0,
     ):
         operation_types_per_file = {
             raw_log_line.split(" ")[7]
