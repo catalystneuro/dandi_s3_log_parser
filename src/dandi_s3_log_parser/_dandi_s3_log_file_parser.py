@@ -81,6 +81,7 @@ def parse_all_dandi_raw_s3_logs(
             desc="Parsing log files...",
             position=0,
             leave=True,
+            smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
         ):
             parse_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
