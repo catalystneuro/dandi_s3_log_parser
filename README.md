@@ -51,11 +51,11 @@ For example, on Drogon:
 ```bash
 parse_all_dandi_raw_s3_logs \
   --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
-  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_12_2024/GET_per_asset_id \
+  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
   --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 6 \
-  --maximum_buffer_size_in_mb 10000
+  --maximum_buffer_size_in_mb 5000
 ```
 
 To parse only a single log file at a time, such as in a CRON job:
@@ -72,13 +72,3 @@ parse_dandi_raw_s3_log \
 ## Submit line decoding errors
 
 Please email line decoding errors collected from your local config file to the core maintainer before raising issues or submitting PRs contributing them as examples, to more easily correct any aspects that might require anonymization.
-
-
-
-## Developer notes
-
-`.log` file suffixes should typically be ignored when working with Git, so when committing changes to the example log collection, you will have to forcibly include it with
-
-```bash
-git add -f <example file name>.log
-```
