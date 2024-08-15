@@ -85,7 +85,7 @@ def parse_all_dandi_raw_s3_logs(
             parse_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
                 parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-                validate=False,
+                validate=True,
                 mode="a",
                 excluded_ips=excluded_ips,
                 asset_id_handler=asset_id_handler,
@@ -217,7 +217,7 @@ def _multi_worker_parse_dandi_raw_s3_log(
         parse_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
             parsed_s3_log_folder_path=per_worker_temporary_folder_path,
-            validate=False,
+            validate=True,
             mode="a",
             excluded_ips=excluded_ips,
             asset_id_handler=asset_id_handler,

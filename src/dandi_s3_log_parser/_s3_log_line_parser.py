@@ -36,6 +36,7 @@ def _append_reduced_log_line(
     bucket: str,
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
+    lines_errors_file_path: pathlib.Path,
     line_index: int,
     log_file_path: pathlib.Path,
     task_id: str,
@@ -90,12 +91,6 @@ def _append_reduced_log_line(
     if validate:
         # Apply some minimal validation and contribute any invalidations to error collection
         # These might slow parsing down a bit, but could be important to ensuring accuracy
-        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
-        errors_folder_path.mkdir(exist_ok=True)
-
-        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
-        date = datetime.datetime.now().strftime("%y%m%d")
-        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
         if not full_log_line.status_code.isdigit():
             message = (
@@ -121,7 +116,7 @@ def _append_reduced_log_line(
             message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
             with open(file=lines_errors_file_path, mode="a") as io:
                 io.write(message)
-            # Fine to continue here
+            # Fine to continue here; just wanted to be made aware if ever difference so can try to investigate why
 
     # More early skip conditions after validation
     # Only accept 200-block status codes

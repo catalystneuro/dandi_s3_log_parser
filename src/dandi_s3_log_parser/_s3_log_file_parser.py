@@ -1,6 +1,8 @@
 """Primary functions for parsing raw S3 log file for DANDI."""
 
 import collections
+import datetime
+import importlib.metadata
 import pathlib
 import uuid
 from collections.abc import Callable
@@ -11,6 +13,7 @@ import tqdm
 from pydantic import validate_call
 
 from ._buffered_text_reader import BufferedTextReader
+from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._s3_log_line_parser import _KNOWN_OPERATION_TYPES, _append_reduced_log_line
 
 
@@ -146,6 +149,14 @@ def _get_reduced_and_binned_log_lines(
     resolved_tqdm_kwargs = dict(default_tqdm_kwargs)
     resolved_tqdm_kwargs.update(tqdm_kwargs)
 
+    errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+    errors_folder_path.mkdir(exist_ok=True)
+
+    dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
+    date = datetime.datetime.now().strftime("%y%m%d")
+    task_id = str(uuid.uuid4())[:5]
+    lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
+
     reduced_and_binned_logs = collections.defaultdict(list)
     buffered_text_reader = BufferedTextReader(
         file_path=raw_s3_log_file_path,
@@ -156,8 +167,6 @@ def _get_reduced_and_binned_log_lines(
         total=len(buffered_text_reader),
         **resolved_tqdm_kwargs,
     )
-
-    task_id = str(uuid.uuid4())[:5]
     per_buffer_index = 0
     for buffered_raw_lines in progress_bar_iterator:
         for index, raw_line in enumerate(buffered_raw_lines):
@@ -171,6 +180,7 @@ def _get_reduced_and_binned_log_lines(
                 bucket=bucket,
                 operation_type=operation_type,
                 excluded_ips=excluded_ips,
+                lines_errors_file_path=lines_errors_file_path,
                 log_file_path=raw_s3_log_file_path,
                 line_index=line_index,
                 task_id=task_id,
