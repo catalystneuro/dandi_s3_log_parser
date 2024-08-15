@@ -3,7 +3,7 @@ import pathlib
 import pandas
 import tqdm
 
-from ._ip_utils import _get_region_from_ip_address, _load_ip_hash_to_region_cache
+from ._ip_utils import _load_ip_hash_to_region_cache, get_region_from_ip_address
 
 
 def order_and_anonymize_parsed_logs(
@@ -32,7 +32,7 @@ def order_and_anonymize_parsed_logs(
         # Map IP addresses to region
         ip_hash_to_region = _load_ip_hash_to_region_cache()
         ordered_and_anonymized_parsed_s3_log["region"] = [
-            _get_region_from_ip_address(ip_address=ip_address, ip_hash_to_region=ip_hash_to_region)
+            get_region_from_ip_address(ip_address=ip_address, ip_hash_to_region=ip_hash_to_region)
             for ip_address in ordered_and_anonymized_parsed_s3_log["ip_address"]
         ]
         del ordered_and_anonymized_parsed_s3_log["ip_address"]
