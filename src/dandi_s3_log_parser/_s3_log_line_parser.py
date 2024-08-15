@@ -31,6 +31,7 @@ def _append_reduced_log_line(
     *,
     raw_line: str,
     reduced_and_binned_logs: collections.defaultdict[str, dict[str, list[str | int]]],
+    validate: bool,
     asset_id_handler: Callable,
     bucket: str,
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
@@ -86,38 +87,41 @@ def _append_reduced_log_line(
     if full_log_line.bucket != bucket:
         return None
 
-    # Apply some minimal validation and contribute any invalidations to error collection
-    # These might slow parsing down a bit, but could be important to ensuring accuracy
-    errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
-    errors_folder_path.mkdir(exist_ok=True)
+    if validate:
+        # Apply some minimal validation and contribute any invalidations to error collection
+        # These might slow parsing down a bit, but could be important to ensuring accuracy
+        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
+        errors_folder_path.mkdir(exist_ok=True)
 
-    dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
-    date = datetime.datetime.now().strftime("%y%m%d")
-    lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
+        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
+        date = datetime.datetime.now().strftime("%y%m%d")
+        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
 
-    if not full_log_line.status_code.isdigit():
-        message = (
-            f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}.\n\n"
-        )
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
-        return None
+        if not full_log_line.status_code.isdigit():
+            message = (
+                f"Unexpected status code: '{full_log_line.status_code}' "
+                f"on line {line_index} of file {log_file_path}.\n\n"
+            )
+            with open(file=lines_errors_file_path, mode="a") as io:
+                io.write(message)
+            return None
 
-    if _IS_OPERATION_TYPE_KNOWN[full_log_line.operation] is False:
-        message = (
-            f"Unexpected request type: '{full_log_line.operation}' on line {line_index} of file {log_file_path}.\n\n"
-        )
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
-        return None
+        if _IS_OPERATION_TYPE_KNOWN[full_log_line.operation] is False:
+            message = (
+                f"Unexpected request type: '{full_log_line.operation}' "
+                f"on line {line_index} of file {log_file_path}.\n\n"
+            )
+            with open(file=lines_errors_file_path, mode="a") as io:
+                io.write(message)
+            return None
 
-    timezone = full_log_line.timestamp[-5:]
-    is_timezone_utc = timezone != "+0000"
-    if is_timezone_utc:
-        message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
-        # Fine to continue here
+        timezone = full_log_line.timestamp[-5:]
+        is_timezone_utc = timezone != "+0000"
+        if is_timezone_utc:
+            message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
+            with open(file=lines_errors_file_path, mode="a") as io:
+                io.write(message)
+            # Fine to continue here
 
     # More early skip conditions after validation
     # Only accept 200-block status codes

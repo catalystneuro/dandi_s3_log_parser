@@ -19,6 +19,7 @@ def parse_raw_s3_log(
     *,
     raw_s3_log_file_path: str | pathlib.Path,
     parsed_s3_log_folder_path: str | pathlib.Path,
+    validate: bool = True,
     mode: Literal["w", "a"] = "a",
     bucket: str | None = None,
     operation_type: Literal[_KNOWN_OPERATION_TYPES] = "REST.GET.OBJECT",
@@ -79,6 +80,7 @@ def parse_raw_s3_log(
 
     reduced_and_binned_logs = _get_reduced_and_binned_log_lines(
         raw_s3_log_file_path=raw_s3_log_file_path,
+        validate=validate,
         asset_id_handler=asset_id_handler,
         bucket=bucket,
         operation_type=operation_type,
@@ -99,6 +101,7 @@ def parse_raw_s3_log(
 def _get_reduced_and_binned_log_lines(
     *,
     raw_s3_log_file_path: pathlib.Path,
+    validate: bool,
     asset_id_handler: Callable,
     bucket: str,
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
@@ -163,6 +166,7 @@ def _get_reduced_and_binned_log_lines(
             _append_reduced_log_line(
                 raw_line=raw_line,
                 reduced_and_binned_logs=reduced_and_binned_logs,
+                validate=validate,
                 asset_id_handler=asset_id_handler,
                 bucket=bucket,
                 operation_type=operation_type,
