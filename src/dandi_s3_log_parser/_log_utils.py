@@ -27,14 +27,12 @@ def find_all_known_operation_types(
         position=0,
         leave=True,
     ):
-        for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path):
-            slice_bound = 200
-            for raw_log_line in buffered_text_reader:
-                fields = raw_log_line[:slice_bound].split(" ")
-                while len(fields) < 7:
-                    slice_bound += 100
-                    fields = raw_log_line[:slice_bound].split(" ")
-                field = fields[7]
-                unique_operation_types.add(field)
+        operation_types_per_file = {
+            raw_log_line.split(" ")[7]
+            for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path)
+            for raw_log_line in buffered_text_reader
+        }
+
+        unique_operation_types.update(operation_types_per_file)
 
     return unique_operation_types
