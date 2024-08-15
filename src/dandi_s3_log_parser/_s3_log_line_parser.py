@@ -80,11 +80,11 @@ def _append_reduced_log_line(
     )
 
     if full_log_line is None:
-        return
+        return None
 
     # Various early skip conditions
     if full_log_line.bucket != bucket:
-        return
+        return None
 
     # Apply some minimal validation and contribute any invalidations to error collection
     # These might slow parsing down a bit, but could be important to ensuring accuracy
@@ -101,6 +101,7 @@ def _append_reduced_log_line(
         )
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
+        return None
 
     if _IS_OPERATION_TYPE_KNOWN[full_log_line.operation] is False:
         message = (
@@ -108,23 +109,26 @@ def _append_reduced_log_line(
         )
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
+        return None
 
-    timezone = full_log_line.timestamp[-5:] != "+0000"
-    if timezone:
+    timezone = full_log_line.timestamp[-5:]
+    is_timezone_utc = timezone != "+0000"
+    if is_timezone_utc:
         message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
         with open(file=lines_errors_file_path, mode="a") as io:
             io.write(message)
+        # Fine to continue here
 
-    # More early skip conditions
+    # More early skip conditions after validation
     # Only accept 200-block status codes
     if full_log_line.status_code[0] != "2":
-        return
+        return None
 
     if full_log_line.operation != operation_type:
-        return
+        return None
 
     if excluded_ips[full_log_line.ip_address] is True:
-        return
+        return None
 
     # All early skip conditions done; the line is parsed so bin the reduced information by handled asset ID
     handled_asset_id = asset_id_handler(raw_asset_id=full_log_line.asset_id)
@@ -141,24 +145,25 @@ def _append_reduced_log_line(
     reduced_and_binned_logs[handled_asset_id]["line_index"].append(line_index)
 
 
-def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
-    indices = list()
-    start = 0
-    max_iter = 10**6
-    while True and start < max_iter:
-        next_index = string.find(substring, start)
-        if next_index == -1:  # .find(...) was unable to locate the substring
-            break
-        indices.append(next_index)
-        start = next_index + 1
+def _parse_s3_log_line(*, raw_line: str) -> list[str]:
+    """
+    The current method of parsing lines of an S3 log file.
 
-    if start >= max_iter:
-        message = (
-            f"Exceeded maximum iterations in `_find_all_possible_substring_indices` on `{string=}` with `{substring=}`."
-        )
-        raise StopIteration(message)
+    Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
+    as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
+    """
+    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=raw_line)]
 
-    return indices
+    number_of_parsed_items = len(parsed_log_line)
+
+    # Everything worked as expected
+    if number_of_parsed_items <= 26:
+        return parsed_log_line
+
+    potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
+    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
+
+    return parsed_log_line
 
 
 def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
@@ -186,25 +191,24 @@ def _attempt_to_remove_quotes(*, raw_line: str, bad_parsed_line: str) -> str:
     return cleaned_raw_line
 
 
-def _parse_s3_log_line(*, raw_line: str) -> list[str]:
-    """
-    The current method of parsing lines of an S3 log file.
+def _find_all_possible_substring_indices(*, string: str, substring: str) -> list[int]:
+    indices = list()
+    start = 0
+    max_iter = 10**6
+    while True and start < max_iter:
+        next_index = string.find(substring, start)
+        if next_index == -1:  # .find(...) was unable to locate the substring
+            break
+        indices.append(next_index)
+        start = next_index + 1
 
-    Bad lines reported in https://github.com/catalystneuro/dandi_s3_log_parser/issues/18 led to quote scrubbing
-    as a pre-step. No self-contained single regex was found that could account for this uncorrected strings.
-    """
-    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=raw_line)]
+    if start >= max_iter:
+        message = (
+            f"Exceeded maximum iterations in `_find_all_possible_substring_indices` on `{string=}` with `{substring=}`."
+        )
+        raise StopIteration(message)
 
-    number_of_parsed_items = len(parsed_log_line)
-
-    # Everything worked as expected
-    if number_of_parsed_items <= 26:
-        return parsed_log_line
-
-    potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
-    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
-
-    return parsed_log_line
+    return indices
 
 
 def _get_full_log_line(
