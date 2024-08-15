@@ -24,10 +24,9 @@ A few summary facts as of 2024:
 - A single line of a raw S3 log file can be between 400-1000+ bytes.
 - Some of the busiest daily logs on the archive can have around 5,014,386 lines.
 - There are more than 6 TB of log files collected in total.
+- This parser reduces that total to around 20 GB of essential information.
 
-This parser reduces this amount of raw content down to only around 20 GB of consolidated usage data per asset.
-
-These are then additionally mapped only to currently available assets in persistent published Dandiset versions and current drafts, which only comprise around 100 MB of total data.
+The reduced information is then additionally mapped to currently available assets in persistent published Dandiset versions and current drafts, which only comprise around 100 MB of the original data.
 
 These small Dandiset-specific summaries are soon to be shared publicly.
 
