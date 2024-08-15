@@ -64,15 +64,16 @@ def parse_all_dandi_raw_s3_logs(
     """
     base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
     parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    excluded_log_files = excluded_log_files or list()
+    excluded_log_files = excluded_log_files or {}
     excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
     excluded_ips = excluded_ips or collections.defaultdict(bool)
 
     asset_id_handler = _get_default_dandi_asset_id_handler()
 
+    daily_raw_s3_log_file_paths = list(set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files)
+
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
-    daily_raw_s3_log_file_paths = set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files
-    random.shuffle(list(daily_raw_s3_log_file_paths))
+    random.shuffle(daily_raw_s3_log_file_paths)
 
     if maximum_number_of_workers == 1:
         for raw_s3_log_file_path in tqdm.tqdm(
@@ -80,6 +81,7 @@ def parse_all_dandi_raw_s3_logs(
             desc="Parsing log files...",
             position=0,
             leave=True,
+            smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
         ):
             parse_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
