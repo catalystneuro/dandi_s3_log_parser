@@ -29,13 +29,6 @@ from .testing import find_random_example_line
     type=click.Path(writable=True),
 )
 @click.option(
-    "--excluded_ips",
-    help="A comma-separated list of IP addresses to exclude from parsing.",
-    required=False,
-    type=str,
-    default=None,
-)
-@click.option(
     "--maximum_number_of_workers",
     help="The maximum number of workers to distribute tasks across.",
     required=False,
@@ -55,12 +48,19 @@ from .testing import find_random_example_line
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
     default=1_000,  # 1 GB recommended
 )
+@click.option(
+    "--excluded_ips",
+    help="A comma-separated list of IP addresses to exclude from parsing.",
+    required=False,
+    type=str,
+    default=None,
+)
 def _reduce_all_dandi_raw_s3_logs_cli(
     base_raw_s3_logs_folder_path: str,
     reduced_s3_logs_folder_path: str,
-    excluded_ips: str | None,
     maximum_number_of_workers: int,
     maximum_buffer_size_in_mb: int,
+    excluded_ips: str | None,
 ) -> None:
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
@@ -71,9 +71,9 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     reduce_all_dandi_raw_s3_logs(
         base_raw_s3_logs_folder_path=base_raw_s3_logs_folder_path,
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
-        excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+        excluded_ips=handled_excluded_ips,
     )
 
 
@@ -91,13 +91,6 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     type=click.Path(writable=True),
 )
 @click.option(
-    "--excluded_ips",
-    help="A comma-separated list of IP addresses to exclude from reduction.",
-    required=False,
-    type=str,
-    default=None,
-)
-@click.option(
     "--maximum_buffer_size_in_mb",
     help=(
         "The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the "
@@ -109,6 +102,13 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     required=False,
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
     default=1_000,  # 1 GB recommended
+)
+@click.option(
+    "--excluded_ips",
+    help="A comma-separated list of IP addresses to exclude from reduction.",
+    required=False,
+    type=str,
+    default=None,
 )
 def _reduce_dandi_raw_s3_log_cli(
     raw_s3_log_file_path: str,
@@ -125,8 +125,8 @@ def _reduce_dandi_raw_s3_log_cli(
     reduce_dandi_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
-        excluded_ips=handled_excluded_ips,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+        excluded_ips=handled_excluded_ips,
     )
 
 
