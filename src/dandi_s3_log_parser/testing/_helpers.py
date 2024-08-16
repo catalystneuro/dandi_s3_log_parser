@@ -1,10 +1,15 @@
 """Collection of helper functions related to testing and generating of example lines."""
 
 import collections
+import hashlib
 import pathlib
 import random
 from typing import Literal
 
+import tqdm
+from pydantic import DirectoryPath, FilePath, validate_call
+
+from .._buffered_text_reader import BufferedTextReader
 from .._config import REQUEST_TYPES
 
 
@@ -103,3 +108,56 @@ def find_random_example_line(
     anonymized_random_line = " ".join(random_line_items)
 
     return anonymized_random_line
+
+
+def get_hash_salt(base_raw_s3_log_folder_path: FilePath) -> str:
+    """
+    Calculate the salt (in hexadecimal encoding) used for IP hashing.
+
+    Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
+
+    Otherwise, it would be fairly easy to iterate over every possible IP address and find the SHA1 of it.
+    """
+    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
+
+    # Retrieve the first line of the first log file (which only we know) and use that as a secure salt
+    first_log_file_path = base_raw_s3_log_folder_path / "2019" / "10" / "01.log"
+
+    with open(file=first_log_file_path) as io:
+        first_line = io.readline()
+
+    hash_salt = hashlib.sha1(string=bytes(first_line, "utf-8"))
+
+    return hash_salt.hexdigest()
+
+
+@validate_call
+def find_all_known_operation_types(
+    base_raw_s3_log_folder_path: DirectoryPath,
+    excluded_log_files: list[FilePath] | None,
+    max_files: int | None = None,
+) -> set:
+    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
+    excluded_log_files = excluded_log_files or {}
+    excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
+
+    daily_raw_s3_log_file_paths = list(set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files)
+    random.shuffle(daily_raw_s3_log_file_paths)
+
+    unique_operation_types = set()
+    for raw_s3_log_file_path in tqdm.tqdm(
+        iterable=daily_raw_s3_log_file_paths[:max_files],
+        desc="Extracting operation types from log files...",
+        position=0,
+        leave=True,
+        smoothing=0,
+    ):
+        operation_types_per_file = {
+            raw_log_line.split(" ")[7]
+            for buffered_text_reader in BufferedTextReader(file_path=raw_s3_log_file_path)
+            for raw_log_line in buffered_text_reader
+        }
+
+        unique_operation_types.update(operation_types_per_file)
+
+    return unique_operation_types

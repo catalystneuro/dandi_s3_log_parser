@@ -39,11 +39,11 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
             test_parsed_s3_log_file_path.stem in expected_asset_ids
         ), f"Asset ID {test_parsed_s3_log_file_path.stem} not found in expected asset IDs!"
 
-        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path, index_col=0)
+        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path)
         expected_parsed_s3_log_file_path = (
             expected_parsed_s3_log_folder_path / f"{test_parsed_s3_log_file_path.stem}.tsv"
         )
-        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path, index_col=0)
+        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path)
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
 
     post_test_error_folder_contents = list(error_folder.iterdir()) if error_folder.exists() else list()

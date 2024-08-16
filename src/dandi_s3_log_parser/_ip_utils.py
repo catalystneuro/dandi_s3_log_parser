@@ -5,7 +5,6 @@ import hashlib
 import importlib.metadata
 import ipaddress
 import os
-import pathlib
 import traceback
 
 import ipinfo
@@ -19,85 +18,7 @@ from ._config import (
 )
 
 
-def get_hash_salt(base_raw_s3_log_folder_path: FilePath) -> str:
-    """
-    Calculate the salt (in hexadecimal encoding) used for IP hashing.
-
-    Uses actual data from the first line of the first log file in the raw S3 log folder, which only we have access to.
-
-    Otherwise, it would be fairly easy to iterate over every possible IP address and find the SHA1 of it.
-    """
-    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
-
-    # Retrieve the first line of the first log file (which only we know) and use that as a secure salt
-    first_log_file_path = base_raw_s3_log_folder_path / "2019" / "10" / "01.log"
-
-    with open(file=first_log_file_path) as io:
-        first_line = io.readline()
-
-    hash_salt = hashlib.sha1(string=bytes(first_line, "utf-8"))
-
-    return hash_salt.hexdigest()
-
-
-def _cidr_address_to_ip_range(*, cidr_address: str) -> list[str]:
-    """Convert a CIDR address to a list of IP addresses."""
-    cidr_address_class = type(ipaddress.ip_address(cidr_address.split("/")[0]))
-    ip_address_range = []
-    if cidr_address_class is ipaddress.IPv4Address:
-        ip_address_range = ipaddress.IPv4Network(address=cidr_address)
-    elif cidr_address_class is ipaddress.IPv6Address:  # pragma: no cover
-        ip_address_range = ipaddress.IPv6Network(address=cidr_address)
-
-    return [str(ip_address) for ip_address in ip_address_range]
-
-
-def _get_latest_github_ip_ranges() -> list[str]:
-    """Retrieve the latest GitHub CIDR ranges from their API and expand them into a list of IP addresses."""
-    github_ip_request = requests.get("https://api.github.com/meta").json()
-
-    skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
-    keys = set(github_ip_request.keys()) - set(skip_keys)
-    github_cidr_addresses = [
-        cidr_address for key in keys for cidr_address in github_ip_request[key] if "::" not in cidr_address  # Skip IPv6
-    ]
-
-    all_github_ips = [
-        str(ip_address)
-        for cidr_address in github_cidr_addresses
-        for ip_address in _cidr_address_to_ip_range(cidr_address=cidr_address)
-    ]
-
-    return all_github_ips
-
-
-def _load_ip_hash_to_region_cache() -> dict[str, str]:
-    """Load the IP hash to region cache from disk."""
-    if not _IP_HASH_TO_REGION_FILE_PATH.exists():
-        return {}  # pragma: no cover
-
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH) as stream:
-        return yaml.load(stream=stream, Loader=yaml.SafeLoader)
-
-
-def _save_ip_hash_to_region_cache(*, ip_hash_to_region: dict[str, str]) -> None:
-    """Save the IP hash to region cache to disk."""
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
-        yaml.dump(data=ip_hash_to_region, stream=stream)
-
-
-def _save_ip_address_to_region_cache(
-    ip_hash_to_region: dict[str, str],
-    ip_hash_to_region_file_path: FilePath | None = None,
-) -> None:
-    """Save the IP address to region cache to disk."""
-    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
-
-    with open(file=ip_hash_to_region_file_path, mode="w") as stream:
-        yaml.dump(data=ip_hash_to_region, stream=stream)
-
-
-def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
+def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
     """
     If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
@@ -168,3 +89,60 @@ def _get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, st
             )
 
         return "unknown"
+
+
+def _cidr_address_to_ip_range(*, cidr_address: str) -> list[str]:
+    """Convert a CIDR address to a list of IP addresses."""
+    cidr_address_class = type(ipaddress.ip_address(cidr_address.split("/")[0]))
+    ip_address_range = []
+    if cidr_address_class is ipaddress.IPv4Address:
+        ip_address_range = ipaddress.IPv4Network(address=cidr_address)
+    elif cidr_address_class is ipaddress.IPv6Address:  # pragma: no cover
+        ip_address_range = ipaddress.IPv6Network(address=cidr_address)
+
+    return [str(ip_address) for ip_address in ip_address_range]
+
+
+def _get_latest_github_ip_ranges() -> list[str]:
+    """Retrieve the latest GitHub CIDR ranges from their API and expand them into a list of IP addresses."""
+    github_ip_request = requests.get("https://api.github.com/meta").json()
+
+    skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
+    keys = set(github_ip_request.keys()) - set(skip_keys)
+    github_cidr_addresses = [
+        cidr_address for key in keys for cidr_address in github_ip_request[key] if "::" not in cidr_address  # Skip IPv6
+    ]
+
+    all_github_ips = [
+        str(ip_address)
+        for cidr_address in github_cidr_addresses
+        for ip_address in _cidr_address_to_ip_range(cidr_address=cidr_address)
+    ]
+
+    return all_github_ips
+
+
+def _load_ip_hash_to_region_cache() -> dict[str, str]:
+    """Load the IP hash to region cache from disk."""
+    if not _IP_HASH_TO_REGION_FILE_PATH.exists():
+        return {}  # pragma: no cover
+
+    with open(file=_IP_HASH_TO_REGION_FILE_PATH) as stream:
+        return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+
+
+def _save_ip_hash_to_region_cache(*, ip_hash_to_region: dict[str, str]) -> None:
+    """Save the IP hash to region cache to disk."""
+    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
+        yaml.dump(data=ip_hash_to_region, stream=stream)
+
+
+def _save_ip_address_to_region_cache(
+    ip_hash_to_region: dict[str, str],
+    ip_hash_to_region_file_path: FilePath | None = None,
+) -> None:
+    """Save the IP address to region cache to disk."""
+    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
+
+    with open(file=ip_hash_to_region_file_path, mode="w") as stream:
+        yaml.dump(data=ip_hash_to_region, stream=stream)
