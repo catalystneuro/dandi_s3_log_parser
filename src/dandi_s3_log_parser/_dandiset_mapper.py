@@ -77,7 +77,7 @@ def _map_reduced_logs_to_dandiset(
             asset_suffixes = pathlib.Path(asset.path).suffixes
             is_asset_zarr = ".zarr" in asset_suffixes
 
-            blob_id = asset.identifier if not is_asset_zarr else asset.zarr
+            blob_id = asset.blob if not is_asset_zarr else asset.zarr
             blobs_or_zarr = "blobs" if not is_asset_zarr else "zarr"
 
             reduced_log_file_path = reduced_s3_logs_folder_path / f"{blobs_or_zarr}_{blob_id}.tsv"
