@@ -74,7 +74,7 @@ def _map_reduced_logs_to_dandiset(
 
         all_reduced_logs = []
         for asset in dandiset_version.get_assets():
-            asset_id = asset.identifier
+            asset_id = asset.identifier.replace("-", "_")
             asset_suffixes = pathlib.Path(asset.path).suffixes
 
             blob_or_zarr = "blobs" if ".zarr" not in asset_suffixes else "zarr"
@@ -91,7 +91,7 @@ def _map_reduced_logs_to_dandiset(
                 for ip_address in reduced_log["ip_address"]
             ]
 
-            reordered_reduced_log = reduced_log.reindex(columns=("asset_id", "timestamp", "bytes_sent", "region"))
+            reordered_reduced_log = reduced_log.reindex(columns=("filename", "timestamp", "bytes_sent", "region"))
             all_reduced_logs.append(reordered_reduced_log)
 
         if len(all_reduced_logs) == 0:
