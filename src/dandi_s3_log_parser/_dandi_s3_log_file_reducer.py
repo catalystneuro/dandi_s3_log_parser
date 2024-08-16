@@ -139,15 +139,17 @@ def reduce_all_dandi_raw_s3_logs(
 
         print("\n\nParallel parsing complete!\n\n")
 
-        for per_worker_temporary_folder_path in tqdm.tqdm(
-            iterable=per_worker_temporary_folder_paths,
-            desc="Merging results across workers...",
-            total=len(per_worker_temporary_folder_paths),
-            position=0,
-            leave=True,
-            mininterval=2.0,
+        for worker_index, per_worker_temporary_folder_path in enumerate(
+            tqdm.tqdm(
+                iterable=per_worker_temporary_folder_paths,
+                desc="Merging results across workers...",
+                total=len(per_worker_temporary_folder_paths),
+                position=0,
+                leave=True,
+                mininterval=2.0,
+            )
         ):
-            per_worker_reduced_s3_log_file_paths = list(per_worker_temporary_folder_path.iterdir())
+            per_worker_reduced_s3_log_file_paths = list(per_worker_temporary_folder_path.rglob("*.tsv"))
             assert (
                 len(per_worker_reduced_s3_log_file_paths) != 0
             ), f"No files found in {per_worker_temporary_folder_path}!"
@@ -160,20 +162,26 @@ def reduce_all_dandi_raw_s3_logs(
                 leave=False,
                 mininterval=2.0,
             ):
-                merged_temporary_file_path = reduced_s3_logs_folder_path / per_worker_reduced_s3_log_file_path.name
+                merge_target_file_path = reduced_s3_logs_folder_path / per_worker_reduced_s3_log_file_path.relative_to(
+                    per_worker_temporary_folder_path
+                )
 
                 parsed_s3_log = pandas.read_table(filepath_or_buffer=per_worker_reduced_s3_log_file_path, header=0)
 
-                header = False if merged_temporary_file_path.exists() else True
+                merge_target_file_path_exists = merge_target_file_path.exists()
+                if not merge_target_file_path_exists and not merge_target_file_path.parent.exists():
+                    merge_target_file_path.parent.mkdir(exist_ok=True, parents=True)
+
+                header = False if merge_target_file_path_exists else True
                 parsed_s3_log.to_csv(
-                    path_or_buf=merged_temporary_file_path,
+                    path_or_buf=merge_target_file_path,
                     mode="a",
                     sep="\t",
                     header=header,
                     index=False,
                 )
 
-            print("\n\n")
+        shutil.rmtree(path=temporary_base_folder_path)
 
 
 # Function cannot be covered because the line calls occur on subprocesses
@@ -302,6 +310,12 @@ def reduce_dandi_raw_s3_log(
 def _get_default_dandi_asset_id_handler() -> Callable:
     def asset_id_handler(*, raw_asset_id: str) -> str:
         split_by_slash = raw_asset_id.split("/")
-        return split_by_slash[0] + "_" + split_by_slash[-1]
+
+        asset_type = split_by_slash[0]
+        if asset_type == "zarr":
+            zarr_blob_form = "/".join(split_by_slash[:2])
+            return zarr_blob_form
+
+        return raw_asset_id
 
     return asset_id_handler
