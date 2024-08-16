@@ -72,6 +72,7 @@ def reduce_all_dandi_raw_s3_logs(
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     random.shuffle(daily_raw_s3_log_file_paths)
 
+    # TODO: add better reporting units to all TQDMs (lines / s, files / s, etc.)
     if maximum_number_of_workers == 1:
         for raw_s3_log_file_path in tqdm.tqdm(
             iterable=daily_raw_s3_log_file_paths,
