@@ -10,7 +10,7 @@ from typing import Literal
 
 import pandas
 import tqdm
-from pydantic import validate_call
+from pydantic import DirectoryPath, FilePath, validate_call
 
 from ._buffered_text_reader import BufferedTextReader
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
@@ -18,31 +18,34 @@ from ._s3_log_line_parser import _KNOWN_OPERATION_TYPES, _append_reduced_log_lin
 
 
 @validate_call
-def parse_raw_s3_log(
+def reduce_raw_s3_log(
     *,
-    raw_s3_log_file_path: str | pathlib.Path,
-    parsed_s3_log_folder_path: str | pathlib.Path,
+    raw_s3_log_file_path: FilePath,
+    reduced_s3_logs_folder_path: DirectoryPath,
     mode: Literal["w", "a"] = "a",
+    maximum_buffer_size_in_bytes: int = 4 * 10**9,
     bucket: str | None = None,
     operation_type: Literal[_KNOWN_OPERATION_TYPES] = "REST.GET.OBJECT",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
-    maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
-    Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
+    Reduce a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
 
-    'Parsing' here means:
-      - limiting only to requests of the specified type (i.e., GET, PUT, etc.)
-      - reducing the information to the asset ID, request time, request size, and geographic IP of the requester
+    'Reduce' here means:
+      - Filtering all lines only by the bucket specified.
+      - Filtering all lines only by the type of operation specified (i.e., REST.GET.OBJECT, REST.PUT.OBJECT, etc.).
+      - Filtering out any non-success status codes.
+      - Filtering out any excluded IP addresses.
+      - Extracting only the asset ID, request timestamp, request size, and IP address that sent the request.
 
     Parameters
     ----------
     raw_s3_log_file_path : str or pathlib.Path
-        Path to the raw S3 log file.
-    parsed_s3_log_folder_path : str or pathlib.Path
-        Path to write each parsed S3 log file to.
+        The path to the raw S3 log file.
+    reduced_s3_log_folder_path : str or pathlib.Path
+        The path to write each reduced S3 log file to.
         There will be one file per handled asset ID.
     mode : "w" or "a", default: "a"
         How to resolve the case when files already exist in the folder containing parsed logs.
@@ -50,6 +53,11 @@ def parse_raw_s3_log(
 
         The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
+    maximum_buffer_size_in_bytes : int, default: 4 GB
+        The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
+        source text file.
+
+        Actual RAM usage will be higher due to overhead and caching.
     bucket : str
         Only parse and return lines that match this bucket.
     operation_type : str, default: "REST.GET"
@@ -65,14 +73,9 @@ def parse_raw_s3_log(
             split_by_slash = raw_asset_id.split("/")
             return split_by_slash[0] + "_" + split_by_slash[-1]
     tqdm_kwargs : dict, optional
-        Keyword arguments to pass to the tqdm progress bar.
-    maximum_buffer_size_in_bytes : int, default: 4 GB
-        The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
-        source text file.
+        Keyword arguments to pass to the tqdm progress bar for line buffers.
     """
-    raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
-    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    parsed_s3_log_folder_path.mkdir(exist_ok=True)
+    reduced_s3_logs_folder_path.mkdir(exist_ok=True)
     bucket = bucket or ""
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     asset_id_handler = asset_id_handler or (lambda asset_id: asset_id)
@@ -82,16 +85,16 @@ def parse_raw_s3_log(
 
     reduced_and_binned_logs = _get_reduced_and_binned_log_lines(
         raw_s3_log_file_path=raw_s3_log_file_path,
-        asset_id_handler=asset_id_handler,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         bucket=bucket,
         operation_type=operation_type,
         excluded_ips=excluded_ips,
+        asset_id_handler=asset_id_handler,
         tqdm_kwargs=tqdm_kwargs,
-        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
 
     for handled_asset_id, reduced_logs_per_handled_asset_id in reduced_and_binned_logs.items():
-        parsed_s3_log_file_path = parsed_s3_log_folder_path / f"{handled_asset_id}.tsv"
+        parsed_s3_log_file_path = reduced_s3_logs_folder_path / f"{handled_asset_id}.tsv"
 
         data_frame = pandas.DataFrame(data=reduced_logs_per_handled_asset_id)
 
@@ -102,45 +105,14 @@ def parse_raw_s3_log(
 def _get_reduced_and_binned_log_lines(
     *,
     raw_s3_log_file_path: pathlib.Path,
-    asset_id_handler: Callable,
+    maximum_buffer_size_in_bytes: int,
     bucket: str,
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
+    asset_id_handler: Callable,
     tqdm_kwargs: dict,
-    maximum_buffer_size_in_bytes: int,
 ) -> collections.defaultdict[str, dict[str, list[str | int]]]:
-    """
-    Reduce the full S3 log file to minimal content and bin by asset ID.
-
-    Parameters
-    ----------
-    raw_s3_log_file_path : str or pathlib.Path
-        Path to the raw S3 log file.
-    asset_id_handler : callable, optional
-        If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
-        translate into nested directory paths) then define a function of the following form:
-
-        # For example
-        def asset_id_handler(*, raw_asset_id: str) -> str:
-            split_by_slash = raw_asset_id.split("/")
-            return split_by_slash[0] + "_" + split_by_slash[-1]
-    bucket : str
-        Only parse and return lines that match this bucket.
-    operation_type : str
-        The type of operation to filter for.
-    excluded_ips : collections.defaultdict of strings to booleans
-        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    tqdm_kwargs : dict, optional
-        Keyword arguments to pass to the tqdm progress bar.
-    maximum_buffer_size_in_bytes : int, default: 4 GB
-        The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
-        source text file.
-
-    Returns
-    -------
-    reduced_and_binned_logs : collections.defaultdict
-        A map of all reduced log line content binned by handled asset ID.
-    """
+    """Reduce the full S3 log file to minimal content and bin by asset ID."""
     tqdm_kwargs = tqdm_kwargs or dict()
     default_tqdm_kwargs = dict(desc="Parsing line buffers...", leave=False)
     resolved_tqdm_kwargs = dict(default_tqdm_kwargs)
@@ -172,10 +144,10 @@ def _get_reduced_and_binned_log_lines(
             _append_reduced_log_line(
                 raw_line=raw_line,
                 reduced_and_binned_logs=reduced_and_binned_logs,
-                asset_id_handler=asset_id_handler,
                 bucket=bucket,
                 operation_type=operation_type,
                 excluded_ips=excluded_ips,
+                asset_id_handler=asset_id_handler,
                 lines_errors_file_path=lines_errors_file_path,
                 log_file_path=raw_s3_log_file_path,
                 line_index=line_index,

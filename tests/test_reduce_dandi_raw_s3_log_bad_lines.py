@@ -22,12 +22,14 @@ def test_reduce_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
     example_raw_s3_log_file_path = examples_folder_path / "0.log"
     expected_reduced_s3_logs_folder_path = examples_folder_path / "expected_output"
 
-    test_reduced_s3_log_folder_path = tmpdir / "reduced_example_2"
+    test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_2"
+    test_reduced_s3_logs_folder_path.mkdir(exist_ok=True)
+
     dandi_s3_log_parser.reduce_dandi_raw_s3_log(
         raw_s3_log_file_path=example_raw_s3_log_file_path,
-        reduced_s3_logs_folder_path=test_reduced_s3_log_folder_path,
+        reduced_s3_logs_folder_path=test_reduced_s3_logs_folder_path,
     )
-    test_output_file_paths = list(test_reduced_s3_log_folder_path.iterdir())
+    test_output_file_paths = list(test_reduced_s3_logs_folder_path.iterdir())
 
     number_of_output_files = len(test_output_file_paths)
     expected_number_of_output_files = 3

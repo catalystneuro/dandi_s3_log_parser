@@ -31,10 +31,10 @@ def _append_reduced_log_line(
     *,
     raw_line: str,
     reduced_and_binned_logs: collections.defaultdict[str, dict[str, list[str | int]]],
-    asset_id_handler: Callable,
     bucket: str,
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
+    asset_id_handler: Callable,
     lines_errors_file_path: pathlib.Path,
     line_index: int,
     log_file_path: pathlib.Path,
@@ -63,6 +63,8 @@ def _append_reduced_log_line(
         The type of operation to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    lines_errors_file_path: pathlib.Path
+        The path to the file where line errors are being collected.
     line_index: int
         The index of the line in the raw log file.
     log_file_path: pathlib.Path

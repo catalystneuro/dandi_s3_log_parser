@@ -67,8 +67,6 @@ def _map_reduced_logs_to_dandiset(
 ) -> None:
     dandiset_id = dandiset.identifier
 
-    dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
-
     for version in dandiset.get_versions():
         version_id = version.identifier
 
@@ -76,24 +74,25 @@ def _map_reduced_logs_to_dandiset(
 
         all_reduced_logs = []
         for asset in dandiset_version.get_assets():
-            asset_id = asset.identifier
             asset_suffixes = pathlib.Path(asset.path).suffixes
+            is_asset_zarr = ".zarr" in asset_suffixes
 
-            blob_or_zarr = "blobs" if ".zarr" not in asset_suffixes else "zarr"
+            blob_id = asset.blob if not is_asset_zarr else asset.zarr
+            blobs_or_zarr = "blobs" if not is_asset_zarr else "zarr"
 
-            reduced_log_file_path = reduced_s3_logs_folder_path / f"{blob_or_zarr}_{asset_id}.tsv"
+            reduced_log_file_path = reduced_s3_logs_folder_path / f"{blobs_or_zarr}_{blob_id}.tsv"
 
             if not reduced_log_file_path.exists():
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset
 
             reduced_log = pandas.read_table(filepath_or_buffer=reduced_log_file_path, header=0)
-            reduced_log["asset_id"] = [asset_id] * len(reduced_log)
+            reduced_log["filename"] = [asset.path] * len(reduced_log)
             reduced_log["region"] = [
                 get_region_from_ip_address(ip_address=ip_address, ip_hash_to_region=ip_hash_to_region)
                 for ip_address in reduced_log["ip_address"]
             ]
 
-            reordered_reduced_log = reduced_log.reindex(columns=("asset_id", "timestamp", "bytes_sent", "region"))
+            reordered_reduced_log = reduced_log.reindex(columns=("filename", "timestamp", "bytes_sent", "region"))
             all_reduced_logs.append(reordered_reduced_log)
 
         if len(all_reduced_logs) == 0:
@@ -103,6 +102,7 @@ def _map_reduced_logs_to_dandiset(
         mapped_log.sort_values(by="timestamp")
         mapped_log.index = range(len(mapped_log))
 
+        dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
         dandiset_log_folder_path.mkdir(exist_ok=True)
         version_file_path = dandiset_log_folder_path / f"{version_id}.tsv"
-        mapped_log.to_csv(version_file_path, mode="w", sep="\t", header=True, index=True)
+        mapped_log.to_csv(path_or_buf=version_file_path, mode="w", sep="\t", header=True, index=True)

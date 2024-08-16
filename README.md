@@ -50,9 +50,9 @@ To iteratively parse all historical logs all at once (parallelization strongly r
 reduce_all_dandi_raw_s3_logs \
   --base_raw_s3_logs_folder_path < base log folder > \
   --reduced_s3_logs_folder_path < output folder > \
-  --excluded_ips < comma-separated list of known IPs to exclude > \
   --maximum_number_of_workers < number of CPUs to use > \
-  --maximum_buffer_size_in_mb < approximate amount of RAM to use >
+  --maximum_buffer_size_in_mb < approximate amount of RAM to use > \
+    --excluded_ips < comma-separated list of known IPs to exclude >
 ```
 
 For example, on Drogon:
@@ -61,9 +61,9 @@ For example, on Drogon:
 reduce_all_dandi_raw_s3_logs \
   --base_raw_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs \
   --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
-  --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 6 \
-  --maximum_buffer_size_in_mb 5000
+  --maximum_buffer_size_in_mb 5000 \
+  --excluded_ips < Drogons IP >
 ```
 
 ### Reduce a single log file

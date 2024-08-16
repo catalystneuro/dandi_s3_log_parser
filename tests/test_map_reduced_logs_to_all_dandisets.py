@@ -43,6 +43,9 @@ def test_map_reduced_logs_to_dandisets(tmpdir: py.path.local):
     assert set(test_dandiset_version_id_file_paths.keys()) == set(expected_dandiset_version_id_file_paths.keys())
 
     for expected_version_id_file_path in expected_dandiset_version_id_file_paths.values():
+        # Pandas assertion makes no reference to the file being tested when it fails
+        print(expected_version_id_file_path)
+
         test_version_id_file_path = (
             dandiset_logs_folder_path / expected_version_id_file_path.parent.name / expected_version_id_file_path.name
         )
