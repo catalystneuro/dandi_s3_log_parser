@@ -15,10 +15,10 @@ from typing import Literal
 
 import pandas
 import tqdm
-from pydantic import DirectoryPath, Field, validate_call
+from pydantic import DirectoryPath, Field, FilePath, validate_call
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
-from ._s3_log_file_parser import parse_raw_s3_log
+from ._s3_log_file_reducer import reduce_raw_s3_log
 
 
 @validate_call
@@ -26,9 +26,9 @@ def reduce_all_dandi_raw_s3_logs(
     *,
     base_raw_s3_logs_folder_path: DirectoryPath,
     reduced_s3_logs_folder_path: DirectoryPath,
-    excluded_ips: collections.defaultdict[str, bool] | None = None,
     maximum_number_of_workers: int = Field(ge=1, default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
+    excluded_ips: collections.defaultdict[str, bool] | None = None,
 ) -> None:
     """
     Batch parse all raw S3 log files in a folder and write the results to a folder of TSV files.
@@ -48,16 +48,18 @@ def reduce_all_dandi_raw_s3_logs(
     reduced_s3_logs_folder_path : file path
         The Path to write each parsed S3 log file to.
         There will be one file per handled asset ID.
-    excluded_ips : collections.defaultdict(bool), optional
-        A lookup table whose keys are IP addresses to exclude from reduction.
     maximum_number_of_workers : int, default: 1
         The maximum number of workers to distribute tasks across.
     maximum_buffer_size_in_bytes : int, default: 4 GB
         The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
         source text files.
+
         Actual total RAM usage will be higher due to overhead and caching.
+
         Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
         greater than one.
+    excluded_ips : collections.defaultdict(bool), optional
+        A lookup table whose keys are IP addresses to exclude from reduction.
     """
     base_raw_s3_logs_folder_path = pathlib.Path(base_raw_s3_logs_folder_path)
     reduced_s3_logs_folder_path = pathlib.Path(reduced_s3_logs_folder_path)
@@ -85,10 +87,10 @@ def reduce_all_dandi_raw_s3_logs(
                 raw_s3_log_file_path=raw_s3_log_file_path,
                 reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
                 mode="a",
+                maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
                 excluded_ips=excluded_ips,
                 asset_id_handler=asset_id_handler,
                 tqdm_kwargs=dict(position=1, leave=False),
-                maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
             )
     else:
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each worker
@@ -120,8 +122,8 @@ def reduce_all_dandi_raw_s3_logs(
                         maximum_number_of_workers=maximum_number_of_workers,
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         temporary_folder_path=temporary_folder_path,
-                        excluded_ips=excluded_ips,
                         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes_per_worker,
+                        excluded_ips=excluded_ips,
                     ),
                 )
 
@@ -216,12 +218,12 @@ def _multi_worker_reduce_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
             reduced_s3_logs_folder_path=per_worker_temporary_folder_path,
             mode="a",
+            maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
             excluded_ips=excluded_ips,
             asset_id_handler=asset_id_handler,
             tqdm_kwargs=dict(
                 position=worker_index + 1, leave=False, desc=f"Parsing line buffers on worker {worker_index+1}..."
             ),
-            maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         )
     except Exception as exception:
         with open(file=parallel_errors_file_path, mode="a") as io:
@@ -229,15 +231,16 @@ def _multi_worker_reduce_dandi_raw_s3_log(
             io.write(error_message)
 
 
+@validate_call
 def reduce_dandi_raw_s3_log(
     *,
-    raw_s3_log_file_path: str | pathlib.Path,
-    reduced_s3_logs_folder_path: str | pathlib.Path,
+    raw_s3_log_file_path: FilePath,
+    reduced_s3_logs_folder_path: DirectoryPath,
     mode: Literal["w", "a"] = "a",
+    maximum_buffer_size_in_bytes: int = 4 * 10**9,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
     tqdm_kwargs: dict | None = None,
-    maximum_buffer_size_in_bytes: int = 4 * 10**9,
 ) -> None:
     """
     Parse a raw S3 log file and write the results to a folder of TSV files, one for each unique asset ID.
@@ -259,6 +262,11 @@ def reduce_dandi_raw_s3_log(
 
         The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
+    maximum_buffer_size_in_bytes : int, default: 4 GB
+        The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
+        source text file.
+
+        Actual RAM usage will be higher due to overhead and caching.
     excluded_ips : collections.defaultdict(bool), optional
         A lookup table whose keys are IP addresses to exclude from reduction.
     asset_id_handler : callable, optional
@@ -270,10 +278,7 @@ def reduce_dandi_raw_s3_log(
             split_by_slash = raw_asset_id.split("/")
             return split_by_slash[0] + "_" + split_by_slash[-1]
     tqdm_kwargs : dict, optional
-        Keyword arguments to pass to the tqdm progress bar.
-    maximum_buffer_size_in_bytes : int, default: 4 GB
-        The theoretical maximum amount of RAM (in bytes) to use on each buffer iteration when reading from the
-        source text file.
+        Keyword arguments to pass to the tqdm progress bar for line buffers.
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
     reduced_s3_logs_folder_path = pathlib.Path(reduced_s3_logs_folder_path)
@@ -283,16 +288,16 @@ def reduce_dandi_raw_s3_log(
     bucket = "dandiarchive"
     operation_type = "REST.GET.OBJECT"
 
-    parse_raw_s3_log(
+    reduce_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
         parsed_s3_log_folder_path=reduced_s3_logs_folder_path,
         mode=mode,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
         bucket=bucket,
         operation_type=operation_type,
         excluded_ips=excluded_ips,
         asset_id_handler=asset_id_handler,
         tqdm_kwargs=tqdm_kwargs,
-        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
 
 

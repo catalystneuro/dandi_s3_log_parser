@@ -7,7 +7,7 @@ from typing import Literal
 import click
 
 from ._config import REQUEST_TYPES
-from ._dandi_s3_log_file_parser import (
+from ._dandi_s3_log_file_reducer import (
     reduce_all_dandi_raw_s3_logs,
     reduce_dandi_raw_s3_log,
 )
