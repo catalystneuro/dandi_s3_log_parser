@@ -10,7 +10,7 @@ from typing import Literal
 
 import pandas
 import tqdm
-from pydantic import FilePath, validate_call
+from pydantic import DirectoryPath, FilePath, validate_call
 
 from ._buffered_text_reader import BufferedTextReader
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
@@ -21,7 +21,7 @@ from ._s3_log_line_parser import _KNOWN_OPERATION_TYPES, _append_reduced_log_lin
 def reduce_raw_s3_log(
     *,
     raw_s3_log_file_path: FilePath,
-    parsed_s3_log_folder_path: FilePath,
+    reduced_s3_logs_folder_path: DirectoryPath,
     mode: Literal["w", "a"] = "a",
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
     bucket: str | None = None,
@@ -44,8 +44,8 @@ def reduce_raw_s3_log(
     ----------
     raw_s3_log_file_path : str or pathlib.Path
         The path to the raw S3 log file.
-    parsed_s3_log_folder_path : str or pathlib.Path
-        The path to write each parsed S3 log file to.
+    reduced_s3_log_folder_path : str or pathlib.Path
+        The path to write each reduced S3 log file to.
         There will be one file per handled asset ID.
     mode : "w" or "a", default: "a"
         How to resolve the case when files already exist in the folder containing parsed logs.
@@ -75,9 +75,7 @@ def reduce_raw_s3_log(
     tqdm_kwargs : dict, optional
         Keyword arguments to pass to the tqdm progress bar for line buffers.
     """
-    raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
-    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    parsed_s3_log_folder_path.mkdir(exist_ok=True)
+    reduced_s3_logs_folder_path.mkdir(exist_ok=True)
     bucket = bucket or ""
     excluded_ips = excluded_ips or collections.defaultdict(bool)
     asset_id_handler = asset_id_handler or (lambda asset_id: asset_id)
@@ -96,7 +94,7 @@ def reduce_raw_s3_log(
     )
 
     for handled_asset_id, reduced_logs_per_handled_asset_id in reduced_and_binned_logs.items():
-        parsed_s3_log_file_path = parsed_s3_log_folder_path / f"{handled_asset_id}.tsv"
+        parsed_s3_log_file_path = reduced_s3_logs_folder_path / f"{handled_asset_id}.tsv"
 
         data_frame = pandas.DataFrame(data=reduced_logs_per_handled_asset_id)
 
