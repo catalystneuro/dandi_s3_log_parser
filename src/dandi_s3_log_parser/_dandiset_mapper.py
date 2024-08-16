@@ -74,12 +74,13 @@ def _map_reduced_logs_to_dandiset(
 
         all_reduced_logs = []
         for asset in dandiset_version.get_assets():
-            asset_id = asset.identifier.replace("-", "_")
             asset_suffixes = pathlib.Path(asset.path).suffixes
+            is_asset_zarr = ".zarr" in asset_suffixes
 
-            blob_or_zarr = "blobs" if ".zarr" not in asset_suffixes else "zarr"
+            blob_id = asset.identifier if not is_asset_zarr else asset.zarr
+            blobs_or_zarr = "blobs" if not is_asset_zarr else "zarr"
 
-            reduced_log_file_path = reduced_s3_logs_folder_path / f"{blob_or_zarr}_{asset_id}.tsv"
+            reduced_log_file_path = reduced_s3_logs_folder_path / f"{blobs_or_zarr}_{blob_id}.tsv"
 
             if not reduced_log_file_path.exists():
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset
