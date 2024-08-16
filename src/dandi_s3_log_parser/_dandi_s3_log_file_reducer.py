@@ -131,7 +131,7 @@ def reduce_all_dandi_raw_s3_logs(
                 total=len(daily_raw_s3_log_file_paths),
                 position=0,
                 leave=True,
-                mininterval=2.0,
+                mininterval=3.0,
                 smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
             )
             for future in progress_bar_iterable:
@@ -146,7 +146,7 @@ def reduce_all_dandi_raw_s3_logs(
                 total=len(per_worker_temporary_folder_paths),
                 position=0,
                 leave=True,
-                mininterval=2.0,
+                mininterval=3.0,
             )
         ):
             per_worker_reduced_s3_log_file_paths = list(per_worker_temporary_folder_path.rglob("*.tsv"))
@@ -160,7 +160,7 @@ def reduce_all_dandi_raw_s3_logs(
                 total=len(per_worker_reduced_s3_log_file_paths),
                 position=1,
                 leave=False,
-                mininterval=2.0,
+                mininterval=3.0,
             ):
                 merge_target_file_path = reduced_s3_logs_folder_path / per_worker_reduced_s3_log_file_path.relative_to(
                     per_worker_temporary_folder_path
