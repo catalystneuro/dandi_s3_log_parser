@@ -10,9 +10,21 @@ from ._ip_utils import _load_ip_hash_to_region_cache, get_region_from_ip_address
 
 
 @validate_call
-def map_reduced_logs_to_all_dandisets(
-    reduced_s3_log_folder_path: DirectoryPath, all_dandiset_logs_folder_path: DirectoryPath
+def map_reduced_logs_to_dandisets(
+    reduced_s3_logs_folder_path: DirectoryPath, dandiset_logs_folder_path: DirectoryPath
 ) -> None:
+    """
+    Iterate over all dandisets and create a single .tsv per dandiset version containing reduced log for all assets.
+
+    Requires the `ipinfo` environment variables to be set (`IPINFO_CREDENTIALS` and `IP_HASH_SALT`).
+
+    Parameters
+    ----------
+    reduced_s3_logs_folder_path : DirectoryPath
+        The path to the folder containing the reduced S3 log files.
+    dandiset_logs_folder_path : DirectoryPath
+        The path to the folder where the mapped logs will be saved.
+    """
     if "IPINFO_CREDENTIALS" not in os.environ:
         message = "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
         raise ValueError(message)  # pragma: no cover
@@ -39,8 +51,8 @@ def map_reduced_logs_to_all_dandisets(
     ):
         _map_reduced_logs_to_dandiset(
             dandiset=dandiset,
-            reduced_s3_log_folder_path=reduced_s3_log_folder_path,
-            all_dandiset_logs_folder_path=all_dandiset_logs_folder_path,
+            reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
+            dandiset_logs_folder_path=dandiset_logs_folder_path,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
         )
@@ -48,14 +60,14 @@ def map_reduced_logs_to_all_dandisets(
 
 def _map_reduced_logs_to_dandiset(
     dandiset: dandi.dandiapi.RemoteDandiset,
-    reduced_s3_log_folder_path: pathlib.Path,
-    all_dandiset_logs_folder_path: pathlib.Path,
+    reduced_s3_logs_folder_path: pathlib.Path,
+    dandiset_logs_folder_path: pathlib.Path,
     client: dandi.dandiapi.DandiAPIClient,
     ip_hash_to_region: dict[str, str],
 ) -> None:
     dandiset_id = dandiset.identifier
 
-    dandiset_log_folder_path = all_dandiset_logs_folder_path / dandiset_id
+    dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
 
     for version in dandiset.get_versions():
         version_id = version.identifier
@@ -69,7 +81,7 @@ def _map_reduced_logs_to_dandiset(
 
             blob_or_zarr = "blobs" if ".zarr" not in asset_suffixes else "zarr"
 
-            reduced_log_file_path = reduced_s3_log_folder_path / f"{blob_or_zarr}_{asset_id}.tsv"
+            reduced_log_file_path = reduced_s3_logs_folder_path / f"{blob_or_zarr}_{asset_id}.tsv"
 
             if not reduced_log_file_path.exists():
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset

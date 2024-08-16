@@ -32,15 +32,24 @@ These small Dandiset-specific summaries are soon to be shared publicly.
 
 
 
-## Usage
-
-To iteratively parse all historical logs all at once (parallelization with 10-15 total GB recommended):
+## Installation
 
 ```bash
-parse_all_dandi_raw_s3_logs \
-  --base_raw_s3_log_folder_path < base log folder > \
-  --parsed_s3_log_folder_path < output folder > \
-  --excluded_log_files < any log files to skip> \
+pip install dandi_s3_log_parser
+```
+
+
+
+## Usage
+
+### Reduce entire history
+
+To iteratively parse all historical logs all at once (parallelization strongly recommended):
+
+```bash
+reduce_all_dandi_raw_s3_logs \
+  --base_raw_s3_logs_folder_path < base log folder > \
+  --reduced_s3_logs_folder_path < output folder > \
   --excluded_ips < comma-separated list of known IPs to exclude > \
   --maximum_number_of_workers < number of CPUs to use > \
   --maximum_buffer_size_in_mb < approximate amount of RAM to use >
@@ -49,24 +58,51 @@ parse_all_dandi_raw_s3_logs \
 For example, on Drogon:
 
 ```bash
-parse_all_dandi_raw_s3_logs \
-  --base_raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs \
-  --parsed_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
-  --excluded_log_files /mnt/backup/dandi/dandiarchive-logs/stats/start-end.log,/mnt/backup/dandi/dandiarchive-logs/2024/05/.git/gc.log \
+reduce_all_dandi_raw_s3_logs \
+  --base_raw_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
   --excluded_ips < Drogons IP > \
   --maximum_number_of_workers 6 \
   --maximum_buffer_size_in_mb 5000
 ```
 
+### Reduce a single log file
+
 To parse only a single log file at a time, such as in a CRON job:
 
 ```bash
-parse_dandi_raw_s3_log \
+reduce_dandi_raw_s3_log \
   --raw_s3_log_file_path < s3 log file path > \
-  --parsed_s3_log_folder_path < output folder > \
+  --reduced_s3_logs_folder_path < output folder > \
   --excluded_ips < comma-separated list of known IPs to exclude >
 ```
 
+For example, on Drogon:
+
+```bash
+reduce_dandi_raw_s3_log \
+  --raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs/2024/08/17.log \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
+  --excluded_ips < Drogons IP >
+```
+
+### Map to Dandisets
+
+The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
+
+```bash
+map_reduced_logs_to_dandisets \
+  --reduced_s3_logs_folder_path < reduced s3 logs folder path > \
+  --dandiset_logs_folder_path < mapped logs folder >
+```
+
+For example, on Drogon:
+
+```bash
+map_reduced_logs_to_dandisets \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
+  --dandiset_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/mapped_logs_8_15_2024
+```
 
 
 ## Submit line decoding errors

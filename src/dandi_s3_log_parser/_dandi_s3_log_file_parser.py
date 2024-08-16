@@ -15,18 +15,17 @@ from typing import Literal
 
 import pandas
 import tqdm
-from pydantic import DirectoryPath, Field, FilePath, validate_call
+from pydantic import DirectoryPath, Field, validate_call
 
 from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
 from ._s3_log_file_parser import parse_raw_s3_log
 
 
 @validate_call
-def parse_all_dandi_raw_s3_logs(
+def reduce_all_dandi_raw_s3_logs(
     *,
-    base_raw_s3_log_folder_path: DirectoryPath,
-    parsed_s3_log_folder_path: DirectoryPath,
-    excluded_log_files: list[FilePath] | None = None,
+    base_raw_s3_logs_folder_path: DirectoryPath,
+    reduced_s3_logs_folder_path: DirectoryPath,
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     maximum_number_of_workers: int = Field(ge=1, default=1),
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
@@ -44,15 +43,13 @@ def parse_all_dandi_raw_s3_logs(
 
     Parameters
     ----------
-    base_raw_s3_log_folder_path : file path
-        Path to the folder containing the raw S3 log files.
-    parsed_s3_log_folder_path : file path
-        Path to write each parsed S3 log file to.
+    base_raw_s3_logs_folder_path : file path
+        The Path to the folder containing the raw S3 log files to be reduced.
+    reduced_s3_logs_folder_path : file path
+        The Path to write each parsed S3 log file to.
         There will be one file per handled asset ID.
-    excluded_log_files : list of file paths, optional
-        A list of log file paths to exclude from parsing.
-    excluded_ips : collections.defaultdict of strings to booleans, optional
-        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    excluded_ips : collections.defaultdict(bool), optional
+        A lookup table whose keys are IP addresses to exclude from reduction.
     maximum_number_of_workers : int, default: 1
         The maximum number of workers to distribute tasks across.
     maximum_buffer_size_in_bytes : int, default: 4 GB
@@ -62,15 +59,15 @@ def parse_all_dandi_raw_s3_logs(
         Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
         greater than one.
     """
-    base_raw_s3_log_folder_path = pathlib.Path(base_raw_s3_log_folder_path)
-    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
-    excluded_log_files = excluded_log_files or {}
-    excluded_log_files = {pathlib.Path(excluded_log_file) for excluded_log_file in excluded_log_files}
+    base_raw_s3_logs_folder_path = pathlib.Path(base_raw_s3_logs_folder_path)
+    reduced_s3_logs_folder_path = pathlib.Path(reduced_s3_logs_folder_path)
     excluded_ips = excluded_ips or collections.defaultdict(bool)
 
     asset_id_handler = _get_default_dandi_asset_id_handler()
 
-    daily_raw_s3_log_file_paths = list(set(base_raw_s3_log_folder_path.rglob(pattern="*.log")) - excluded_log_files)
+    daily_raw_s3_log_file_paths = [
+        path for path in base_raw_s3_logs_folder_path.rglob(pattern="*.log") if path.stem.isdigit()
+    ]
 
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     random.shuffle(daily_raw_s3_log_file_paths)
@@ -83,9 +80,9 @@ def parse_all_dandi_raw_s3_logs(
             leave=True,
             smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
         ):
-            parse_dandi_raw_s3_log(
+            reduce_dandi_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
-                parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+                reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
                 mode="a",
                 excluded_ips=excluded_ips,
                 asset_id_handler=asset_id_handler,
@@ -94,7 +91,7 @@ def parse_all_dandi_raw_s3_logs(
             )
     else:
         # Create a fresh temporary directory in the home folder and then fresh subfolders for each worker
-        temporary_base_folder_path = parsed_s3_log_folder_path / ".temp"
+        temporary_base_folder_path = reduced_s3_logs_folder_path / ".temp"
         temporary_base_folder_path.mkdir(exist_ok=True)
 
         # Clean up any previous tasks that failed to clean themselves up
@@ -118,7 +115,7 @@ def parse_all_dandi_raw_s3_logs(
             for raw_s3_log_file_path in daily_raw_s3_log_file_paths:
                 futures.append(
                     executor.submit(
-                        _multi_worker_parse_dandi_raw_s3_log,
+                        _multi_worker_reduce_dandi_raw_s3_log,
                         maximum_number_of_workers=maximum_number_of_workers,
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         temporary_folder_path=temporary_folder_path,
@@ -162,7 +159,7 @@ def parse_all_dandi_raw_s3_logs(
                 leave=False,
                 mininterval=2.0,
             ):
-                merged_temporary_file_path = parsed_s3_log_folder_path / per_worker_parsed_s3_log_file_path.name
+                merged_temporary_file_path = reduced_s3_logs_folder_path / per_worker_parsed_s3_log_file_path.name
 
                 parsed_s3_log = pandas.read_table(filepath_or_buffer=per_worker_parsed_s3_log_file_path, header=0)
 
@@ -180,7 +177,7 @@ def parse_all_dandi_raw_s3_logs(
 
 # Function cannot be covered because the line calls occur on subprocesses
 # pragma: no cover
-def _multi_worker_parse_dandi_raw_s3_log(
+def _multi_worker_reduce_dandi_raw_s3_log(
     *,
     maximum_number_of_workers: int,
     raw_s3_log_file_path: pathlib.Path,
@@ -214,9 +211,9 @@ def _multi_worker_parse_dandi_raw_s3_log(
             f"Worker index {worker_index}/{maximum_number_of_workers} parsing {raw_s3_log_file_path} failed due to\n\n"
         )
 
-        parse_dandi_raw_s3_log(
+        reduce_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
-            parsed_s3_log_folder_path=per_worker_temporary_folder_path,
+            reduced_s3_logs_folder_path=per_worker_temporary_folder_path,
             mode="a",
             excluded_ips=excluded_ips,
             asset_id_handler=asset_id_handler,
@@ -231,10 +228,10 @@ def _multi_worker_parse_dandi_raw_s3_log(
             io.write(error_message)
 
 
-def parse_dandi_raw_s3_log(
+def reduce_dandi_raw_s3_log(
     *,
     raw_s3_log_file_path: str | pathlib.Path,
-    parsed_s3_log_folder_path: str | pathlib.Path,
+    reduced_s3_logs_folder_path: str | pathlib.Path,
     mode: Literal["w", "a"] = "a",
     excluded_ips: collections.defaultdict[str, bool] | None = None,
     asset_id_handler: Callable | None = None,
@@ -251,8 +248,8 @@ def parse_dandi_raw_s3_log(
     Parameters
     ----------
     raw_s3_log_file_path : string or pathlib.Path
-        Path to the raw S3 log file.
-    parsed_s3_log_folder_path : string or pathlib.Path
+        Path to the raw S3 log file to be reduced.
+    reduced_s3_logs_folder_path : string or pathlib.Path
         The path to write each parsed S3 log file to.
         There will be one file per handled asset ID.
     mode : "w" or "a", default: "a"
@@ -261,8 +258,8 @@ def parse_dandi_raw_s3_log(
 
         The intention of the default usage is to have one consolidated raw S3 log file per day and then to iterate
         over each day, parsing and binning by asset, effectively 'updating' the parsed collection on each iteration.
-    excluded_ips : collections.defaultdict of strings to booleans, optional
-        A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
+    excluded_ips : collections.defaultdict(bool), optional
+        A lookup table whose keys are IP addresses to exclude from reduction.
     asset_id_handler : callable, optional
         If your asset IDs in the raw log require custom handling (i.e., they contain slashes that you do not wish to
         translate into nested directory paths) then define a function of the following form:
@@ -278,7 +275,7 @@ def parse_dandi_raw_s3_log(
         source text file.
     """
     raw_s3_log_file_path = pathlib.Path(raw_s3_log_file_path)
-    parsed_s3_log_folder_path = pathlib.Path(parsed_s3_log_folder_path)
+    reduced_s3_logs_folder_path = pathlib.Path(reduced_s3_logs_folder_path)
     asset_id_handler = asset_id_handler or _get_default_dandi_asset_id_handler()
     tqdm_kwargs = tqdm_kwargs or dict()
 
@@ -287,7 +284,7 @@ def parse_dandi_raw_s3_log(
 
     parse_raw_s3_log(
         raw_s3_log_file_path=raw_s3_log_file_path,
-        parsed_s3_log_folder_path=parsed_s3_log_folder_path,
+        parsed_s3_log_folder_path=reduced_s3_logs_folder_path,
         mode=mode,
         bucket=bucket,
         operation_type=operation_type,

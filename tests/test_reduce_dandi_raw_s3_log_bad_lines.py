@@ -6,7 +6,7 @@ import py
 import dandi_s3_log_parser
 
 
-def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
+def test_reduce_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
     """
     'parsed_example_2' contains the basic test cases as well as a collection of 'bad lines' contributed over time.
     """
@@ -18,22 +18,22 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
     initial_number_of_error_folder_contents = len(error_folder_contents)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "parsed_example_2"
-    example_raw_s3_log_file_path = examples_folder_path / "example_dandi_s3_log.log"
-    expected_parsed_s3_log_folder_path = examples_folder_path / "expected_output"
+    examples_folder_path = file_parent / "examples" / "reduced_example_2"
+    example_raw_s3_log_file_path = examples_folder_path / "0.log"
+    expected_reduced_s3_logs_folder_path = examples_folder_path / "expected_output"
 
-    test_parsed_s3_log_folder_path = tmpdir / "parsed_example_2"
-    dandi_s3_log_parser.parse_dandi_raw_s3_log(
+    test_reduced_s3_log_folder_path = tmpdir / "reduced_example_2"
+    dandi_s3_log_parser.reduce_dandi_raw_s3_log(
         raw_s3_log_file_path=example_raw_s3_log_file_path,
-        parsed_s3_log_folder_path=test_parsed_s3_log_folder_path,
+        reduced_s3_logs_folder_path=test_reduced_s3_log_folder_path,
     )
-    test_output_file_paths = list(test_parsed_s3_log_folder_path.iterdir())
+    test_output_file_paths = list(test_reduced_s3_log_folder_path.iterdir())
 
     number_of_output_files = len(test_output_file_paths)
     expected_number_of_output_files = 3
     assert number_of_output_files == expected_number_of_output_files
 
-    expected_asset_ids = [path.stem for path in expected_parsed_s3_log_folder_path.iterdir() if path.is_file()]
+    expected_asset_ids = [path.stem for path in expected_reduced_s3_logs_folder_path.iterdir() if path.is_file()]
     for test_parsed_s3_log_file_path in test_output_file_paths:
         assert (
             test_parsed_s3_log_file_path.stem in expected_asset_ids
@@ -41,7 +41,7 @@ def test_parse_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
 
         test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path)
         expected_parsed_s3_log_file_path = (
-            expected_parsed_s3_log_folder_path / f"{test_parsed_s3_log_file_path.stem}.tsv"
+            expected_reduced_s3_logs_folder_path / f"{test_parsed_s3_log_file_path.stem}.tsv"
         )
         expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path)
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)

@@ -1,7 +1,6 @@
-"""Call the raw S3 log parser from the command line."""
+"""Call the DANDI S3 log parser from the command line."""
 
 import collections
-import os
 import pathlib
 from typing import Literal
 
@@ -9,33 +8,25 @@ import click
 
 from ._config import REQUEST_TYPES
 from ._dandi_s3_log_file_parser import (
-    parse_all_dandi_raw_s3_logs,
-    parse_dandi_raw_s3_log,
+    reduce_all_dandi_raw_s3_logs,
+    reduce_dandi_raw_s3_log,
 )
+from ._dandiset_mapper import map_reduced_logs_to_dandisets
 from .testing._helpers import find_random_example_line
 
-NUMBER_OF_CPU = os.cpu_count()  # Note: Not distinguishing if logical or not
 
-
-@click.command(name="parse_all_dandi_raw_s3_logs")
+@click.command(name="reduce_all_dandi_raw_s3_logs")
 @click.option(
-    "--base_raw_s3_log_folder_path",
+    "--base_raw_s3_logs_folder_path",
     help="The path to the base folder containing all raw S3 log files.",
     required=True,
     type=click.Path(writable=False),
 )
 @click.option(
-    "--parsed_s3_log_folder_path",
-    help="The path to write each parsed S3 log file to. There will be one file per handled asset ID.",
+    "--reduced_s3_logs_folder_path",
+    help="The path to write each reduced S3 log file to. There will be one file per handled asset ID.",
     required=True,
     type=click.Path(writable=True),
-)
-@click.option(
-    "--excluded_log_files",
-    help="A comma-separated list of log files to exclude from parsing.",
-    required=False,
-    type=str,
-    default=None,
 )
 @click.option(
     "--excluded_ips",
@@ -64,35 +55,100 @@ The theoretical maximum amount of RAM (in MB) to use on each buffer iteration wh
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
     default=1_000,  # 1 GB recommended
 )
-def parse_all_dandi_raw_s3_logs_cli(
-    base_raw_s3_log_folder_path: str,
-    parsed_s3_log_folder_path: str,
-    excluded_log_files: str | None,
+def _reduce_all_dandi_raw_s3_logs_cli(
+    base_raw_s3_logs_folder_path: str,
+    reduced_s3_logs_folder_path: str,
     excluded_ips: str | None,
     maximum_number_of_workers: int,
     maximum_buffer_size_in_mb: int,
 ) -> None:
-    split_excluded_log_files = excluded_log_files.split(",") if excluded_log_files is not None else list()
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
         handled_excluded_ips[excluded_ip] = True
     maximum_buffer_size_in_bytes = maximum_buffer_size_in_mb * 10**6
 
-    parse_all_dandi_raw_s3_logs(
-        base_raw_s3_log_folder_path=base_raw_s3_log_folder_path,
-        parsed_s3_log_folder_path=parsed_s3_log_folder_path,
-        excluded_log_files=split_excluded_log_files,
+    reduce_all_dandi_raw_s3_logs(
+        base_raw_s3_logs_folder_path=base_raw_s3_logs_folder_path,
+        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
         excluded_ips=handled_excluded_ips,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
     )
 
 
-# TODO
-@click.command(name="parse_dandi_raw_s3_log")
-def parse_dandi_raw_s3_log_cli() -> None:
-    parse_dandi_raw_s3_log()
+@click.command(name="reduce_dandi_raw_s3_log")
+@click.option(
+    "--raw_s3_log_file_path",
+    help="The path to the raw S3 log file to be reduced.",
+    required=True,
+    type=click.Path(writable=False),
+)
+@click.option(
+    "--reduced_s3_logs_folder_path",
+    help="The path to write each reduced S3 log file to. There will be one file per handled asset ID.",
+    required=True,
+    type=click.Path(writable=True),
+)
+@click.option(
+    "--excluded_ips",
+    help="A comma-separated list of IP addresses to exclude from reduction.",
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
+    "--maximum_buffer_size_in_mb",
+    help=""""
+The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the
+    source text files.
+    Actual total RAM usage will be higher due to overhead and caching.
+    Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
+    greater than one.
+""",
+    required=False,
+    type=click.IntRange(min=1),  # Bare minimum of 1 MB
+    default=1_000,  # 1 GB recommended
+)
+def _reduce_dandi_raw_s3_log_cli(
+    raw_s3_log_file_path: str,
+    reduced_s3_logs_folder_path: str,
+    excluded_ips: str | None,
+    maximum_buffer_size_in_mb: int,
+) -> None:
+    split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
+    handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
+    for excluded_ip in split_excluded_ips:
+        handled_excluded_ips[excluded_ip] = True
+    maximum_buffer_size_in_bytes = maximum_buffer_size_in_mb * 10**6
+
+    reduce_dandi_raw_s3_log(
+        raw_s3_log_file_path=raw_s3_log_file_path,
+        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
+        excluded_ips=handled_excluded_ips,
+        maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+    )
+
+
+@click.command(name="map_reduced_logs_to_dandisets")
+@click.option(
+    "--reduced_s3_logs_folder_path",
+    help="",
+    required=True,
+    type=click.Path(writable=False),
+)
+@click.option(
+    "--dandiset_logs_folder_path",
+    help="",
+    required=True,
+    type=click.Path(writable=False),
+)
+def _map_reduced_logs_to_dandisets_cli(
+    reduced_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
+) -> None:
+    map_reduced_logs_to_dandisets(
+        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
+    )
 
 
 @click.command(name="find_random_example_line")
@@ -128,7 +184,7 @@ These lines are always found chronologically from the start of the file.
     type=click.IntRange(min=0),
     default=0,
 )
-def find_random_example_line_cli(
+def _find_random_example_line_cli(
     raw_s3_log_folder_path: str | pathlib.Path,
     request_type: Literal[REQUEST_TYPES],
     maximum_lines_per_request_type: int = 5,
