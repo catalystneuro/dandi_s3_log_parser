@@ -1,0 +1,76 @@
+name: Dev tests
+on:
+  workflow_call:
+    secrets:
+      IP_HASH_SALT:
+        required: true
+      IPINFO_CREDENTIALS:
+        required: true
+      CODECOV_CREDENTIALS:
+        required: true
+
+env:
+  IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
+  IPINFO_CREDENTIALS: ${{ secrets.IPINFO_CREDENTIALS }}
+
+jobs:
+
+  run:
+    # Will read on PR dashboard as 'Deploy / DevTests / ubuntu'
+    # Action dashboard identified by 'Dev tests'
+    # Requirement settings identified as 'DevTests / ubuntu'
+    name: ubuntu
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch --prune --unshallow --tags
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Global Setup
+        run: |
+          python -m pip install -U pip
+          pip install pytest-cov
+
+      - name: Install local checkout
+        run: pip install --no-cache-dir .
+
+      - name: Display installed packages and their sources for debugging
+        run: pip list
+
+      - name: Ensure caching is working
+        run: ls ~
+
+      - name: Cache IP to region mapping to prevent overuse of ipinfo
+        uses: actions/cache@v4
+        id: dandi_home_cache
+        with:
+          path: ~/.dandi_s3_log_parser
+          key: ubuntu_dandi_home_cache
+
+      - if: steps.dandi_home_cache.outputs.cache-hit == 'true'
+        name: Ensure caching is working
+        run: |
+          ls ~
+          ls ~/.dandi_s3_log_parser
+          cat ~/.dandi_s3_log_parser/ip_hash_to_region.yaml
+
+      - name: Run pytest with coverage and printout coverage for debugging
+        run: |
+          pytest testing_live_services.py -vv -rsx --cov=dandi_s3_log_parser --cov-report xml:./coverage.xml
+          cat ./coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_CREDENTIALS }}
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
+          verbose: true

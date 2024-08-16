@@ -302,6 +302,12 @@ def reduce_dandi_raw_s3_log(
 def _get_default_dandi_asset_id_handler() -> Callable:
     def asset_id_handler(*, raw_asset_id: str) -> str:
         split_by_slash = raw_asset_id.split("/")
-        return split_by_slash[0] + "_" + split_by_slash[-1]
+
+        asset_type = split_by_slash[0]
+        if asset_type == "zarr":
+            zarr_blob_form = "/".join(split_by_slash[:2])
+            return zarr_blob_form
+
+        return raw_asset_id
 
     return asset_id_handler

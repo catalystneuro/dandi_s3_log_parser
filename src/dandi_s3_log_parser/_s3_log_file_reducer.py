@@ -44,7 +44,7 @@ def reduce_raw_s3_log(
     ----------
     raw_s3_log_file_path : str or pathlib.Path
         The path to the raw S3 log file.
-    reduced_s3_log_folder_path : str or pathlib.Path
+    reduced_s3_logs_folder_path : str or pathlib.Path
         The path to write each reduced S3 log file to.
         There will be one file per handled asset ID.
     mode : "w" or "a", default: "a"
@@ -94,12 +94,18 @@ def reduce_raw_s3_log(
     )
 
     for handled_asset_id, reduced_logs_per_handled_asset_id in reduced_and_binned_logs.items():
-        parsed_s3_log_file_path = reduced_s3_logs_folder_path / f"{handled_asset_id}.tsv"
+        handled_asset_id_path = pathlib.Path(handled_asset_id)
+        blob_id = handled_asset_id_path.stem
+        reduced_s3_log_file_path = reduced_s3_logs_folder_path / handled_asset_id_path.parent / f"{blob_id}.tsv"
+
+        reduced_log_file_exists = reduced_s3_log_file_path.exists()
+        if not reduced_log_file_exists and not reduced_s3_log_file_path.parent.exists():
+            reduced_s3_log_file_path.parent.mkdir(exist_ok=True, parents=True)
 
         data_frame = pandas.DataFrame(data=reduced_logs_per_handled_asset_id)
 
-        header = False if parsed_s3_log_file_path.exists() is True and mode == "a" else True
-        data_frame.to_csv(path_or_buf=parsed_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
+        header = False if reduced_log_file_exists is True and mode == "a" else True
+        data_frame.to_csv(path_or_buf=reduced_s3_log_file_path, mode=mode, sep="\t", header=header, index=False)
 
 
 def _get_reduced_and_binned_log_lines(
