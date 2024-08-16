@@ -67,8 +67,6 @@ def _map_reduced_logs_to_dandiset(
 ) -> None:
     dandiset_id = dandiset.identifier
 
-    dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
-
     for version in dandiset.get_versions():
         version_id = version.identifier
 
@@ -87,7 +85,7 @@ def _map_reduced_logs_to_dandiset(
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset
 
             reduced_log = pandas.read_table(filepath_or_buffer=reduced_log_file_path, header=0)
-            reduced_log["asset_id"] = [asset_id] * len(reduced_log)
+            reduced_log["filename"] = [asset.path] * len(reduced_log)
             reduced_log["region"] = [
                 get_region_from_ip_address(ip_address=ip_address, ip_hash_to_region=ip_hash_to_region)
                 for ip_address in reduced_log["ip_address"]
@@ -103,6 +101,7 @@ def _map_reduced_logs_to_dandiset(
         mapped_log.sort_values(by="timestamp")
         mapped_log.index = range(len(mapped_log))
 
+        dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
         dandiset_log_folder_path.mkdir(exist_ok=True)
         version_file_path = dandiset_log_folder_path / f"{version_id}.tsv"
-        mapped_log.to_csv(version_file_path, mode="w", sep="\t", header=True, index=True)
+        mapped_log.to_csv(path_or_buf=version_file_path, mode="w", sep="\t", header=True, index=True)
