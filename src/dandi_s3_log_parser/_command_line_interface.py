@@ -196,3 +196,5 @@ def _find_random_example_line_cli(
         seed=seed,
     )
     print(example_line)
+
+    return None
