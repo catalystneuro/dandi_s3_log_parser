@@ -6,7 +6,7 @@ import py
 import dandi_s3_log_parser
 
 
-def test_parse_dandi_raw_s3_log(tmpdir: py.path.local):
+def test_map_reduced_logs_to_all_dandisets(tmpdir: py.path.local):
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent

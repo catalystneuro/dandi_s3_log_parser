@@ -38,11 +38,11 @@ def test_parse_all_dandi_raw_s3_logs_example_1(tmpdir: py.path.local) -> None:
             test_parsed_s3_log_file_path.stem in expected_asset_ids
         ), f"Asset ID {test_parsed_s3_log_file_path.stem} not found in expected asset IDs!"
 
-        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path, index_col=0)
+        test_parsed_s3_log = pandas.read_table(filepath_or_buffer=test_parsed_s3_log_file_path)
         expected_parsed_s3_log_file_path = (
             expected_parsed_s3_log_folder_path / f"{test_parsed_s3_log_file_path.stem}.tsv"
         )
-        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path, index_col=0)
+        expected_parsed_s3_log = pandas.read_table(filepath_or_buffer=expected_parsed_s3_log_file_path)
 
         test_parsed_s3_log = test_parsed_s3_log.sort_values(by="timestamp")
         expected_parsed_s3_log = expected_parsed_s3_log.sort_values(by="timestamp")
