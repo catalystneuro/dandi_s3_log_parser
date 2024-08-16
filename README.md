@@ -81,7 +81,7 @@ For example, on Drogon:
 
 ```bash
 reduce_dandi_raw_s3_log \
-  --raw_s3_log_folder_path /mnt/backup/dandi/dandiarchive-logs/2024/08/17.log \
+  --raw_s3_log_file_path /mnt/backup/dandi/dandiarchive-logs/2024/08/17.log \
   --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
   --excluded_ips < Drogons IP >
 ```

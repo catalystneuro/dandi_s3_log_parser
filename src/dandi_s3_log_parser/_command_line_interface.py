@@ -12,7 +12,7 @@ from ._dandi_s3_log_file_parser import (
     reduce_dandi_raw_s3_log,
 )
 from ._dandiset_mapper import map_reduced_logs_to_dandisets
-from .testing._helpers import find_random_example_line
+from .testing import find_random_example_line
 
 
 @click.command(name="reduce_all_dandi_raw_s3_logs")
@@ -44,13 +44,13 @@ from .testing._helpers import find_random_example_line
 )
 @click.option(
     "--maximum_buffer_size_in_mb",
-    help=""""
-The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the
-    source text files.
-    Actual total RAM usage will be higher due to overhead and caching.
-    Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
-    greater than one.
-""",
+    help=(
+        "The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the "
+        "source text files. "
+        "Actual total RAM usage will be higher due to overhead and caching. "
+        "Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is "
+        "greater than one."
+    ),
     required=False,
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
     default=1_000,  # 1 GB recommended
@@ -99,13 +99,13 @@ def _reduce_all_dandi_raw_s3_logs_cli(
 )
 @click.option(
     "--maximum_buffer_size_in_mb",
-    help=""""
-The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the
-    source text files.
-    Actual total RAM usage will be higher due to overhead and caching.
-    Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is
-    greater than one.
-""",
+    help=(
+        "The theoretical maximum amount of RAM (in MB) to use on each buffer iteration when reading from the "
+        "source text files. "
+        "Actual total RAM usage will be higher due to overhead and caching. "
+        "Automatically splits this total amount over the maximum number of workers if `maximum_number_of_workers` is "
+        "greater than one."
+    ),
     required=False,
     type=click.IntRange(min=1),  # Bare minimum of 1 MB
     default=1_000,  # 1 GB recommended
@@ -167,11 +167,9 @@ def _map_reduced_logs_to_dandisets_cli(
 @click.option(
     "--maximum_lines_per_request_type",
     help=(
-        """The maximum number of lines to randomly sample for each request type.
-The default is 5.
-
-These lines are always found chronologically from the start of the file.
-"""
+        "The maximum number of lines to randomly sample for each request type. "
+        "The default is 5. "
+        "These lines are always found chronologically from the start of the file."
     ),
     required=False,
     type=click.IntRange(min=2),
@@ -198,3 +196,5 @@ def _find_random_example_line_cli(
         seed=seed,
     )
     print(example_line)
+
+    return None
