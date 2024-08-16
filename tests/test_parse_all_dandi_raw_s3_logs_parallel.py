@@ -48,6 +48,9 @@ def test_parse_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local) -
         test_parsed_s3_log = test_parsed_s3_log.sort_values(by="timestamp")
         expected_parsed_s3_log = expected_parsed_s3_log.sort_values(by="timestamp")
 
+        test_parsed_s3_log.index = range(len(test_parsed_s3_log))
+        expected_parsed_s3_log.index = range(len(expected_parsed_s3_log))
+
         pandas.testing.assert_frame_equal(left=test_parsed_s3_log, right=expected_parsed_s3_log)
 
 
