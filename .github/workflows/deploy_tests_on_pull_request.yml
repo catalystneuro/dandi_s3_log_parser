@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
 
-  DevTests:
+  Tests:
     uses: ./.github/workflows/testing.yml
     secrets:
       CODECOV_CREDENTIALS: ${{ secrets.CODECOV_CREDENTIALS }}

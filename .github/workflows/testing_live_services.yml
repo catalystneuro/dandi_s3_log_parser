@@ -62,7 +62,7 @@ jobs:
 
       - name: Run pytest with coverage and printout coverage for debugging
         run: |
-          pytest testing_live_services.py -vv -rsx --cov=dandi_s3_log_parser --cov-report xml:./coverage.xml
+          pytest testing_live_services -vv -rsx --cov=dandi_s3_log_parser --cov-report xml:./coverage.xml
           cat ./coverage.xml
 
       - name: Upload coverage to Codecov
