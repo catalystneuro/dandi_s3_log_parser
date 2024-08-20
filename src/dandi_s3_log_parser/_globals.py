@@ -73,7 +73,7 @@ _IS_OPERATION_TYPE_KNOWN = collections.defaultdict(bool)
 for request_type in _KNOWN_OPERATION_TYPES:
     _IS_OPERATION_TYPE_KNOWN[request_type] = True
 
-_FULL_PATTERN_TO_FIELD_MAPPING = [
+_S3_LOG_FIELDS = (
     "bucket_owner",
     "bucket",
     "timestamp",
@@ -81,10 +81,10 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "requester",
     "request_id",
     "operation",
-    "asset_id",
+    "object_key",
     "request_uri",
     # "http_version",  # Regex not splitting this from the request_uri...
-    "status_code",
+    "http_status_code",
     "error_code",
     "bytes_sent",
     "object_size",
@@ -92,15 +92,16 @@ _FULL_PATTERN_TO_FIELD_MAPPING = [
     "turn_around_time",
     "referrer",
     "user_agent",
-    "version",
+    "version_id",
     "host_id",
-    "sigv",
+    "signature_version",
     "cipher_suite",
-    "auth_type",
-    "endpoint",
+    "authentication_type",
+    "host_header",
     "tls_version",
     "access_point_arn",
-]
-_FullLogLine = collections.namedtuple("FullLogLine", _FULL_PATTERN_TO_FIELD_MAPPING)
+    "acl_required",
+)
+_FullLogLine = collections.namedtuple("FullLogLine", _S3_LOG_FIELDS)
 
 _S3_LOG_REGEX = re.compile(pattern=r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
