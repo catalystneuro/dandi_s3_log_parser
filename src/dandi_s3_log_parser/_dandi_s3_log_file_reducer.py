@@ -42,7 +42,7 @@ def reduce_all_dandi_raw_s3_logs(
     raw_s3_logs_folder_path : file path
         The path to the folder containing the raw S3 log files to be reduced.
     reduced_s3_logs_folder_path : file path
-        The [ath to write each reduced S3 log file to.
+        The path to write each reduced S3 log file to.
         There will be one file per handled asset ID.
     maximum_number_of_workers : int, default: 1
         The maximum number of workers to distribute tasks across.
