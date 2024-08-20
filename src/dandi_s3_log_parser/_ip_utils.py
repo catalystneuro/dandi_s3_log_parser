@@ -1,8 +1,6 @@
 """Various private utility functions for handling IP address related tasks."""
 
-import datetime
 import hashlib
-import importlib.metadata
 import ipaddress
 import os
 import traceback
@@ -14,8 +12,8 @@ from pydantic import FilePath
 
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
-    DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH,
 )
+from ._error_collection import _collect_error
 
 
 def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
@@ -74,19 +72,12 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
         # Return the generic 'unknown' but do not cache
         return "unknown"
     except Exception as exception:  # pragma: no cover
-        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
-        errors_folder_path.mkdir(exist_ok=True)
-
-        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
-        date = datetime.datetime.now().strftime("%y%m%d")
-        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_ipinfo_errors.txt"
-
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(
-                f"Error fetching IP information for {ip_address}!\n\n"
-                f"{type(exception)}: {exception!s}\n\n"
-                f"{traceback.format_exc()}",
-            )
+        message = (
+            f"Error fetching IP information for {ip_address}!\n\n"
+            f"{type(exception)}: {exception!s}\n\n"
+            f"{traceback.format_exc()}",
+        )
+        _collect_error(message=message, error_type="ipinfo")
 
         return "unknown"
 

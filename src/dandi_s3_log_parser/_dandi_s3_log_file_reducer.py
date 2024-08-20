@@ -1,8 +1,6 @@
 """Primary functions for parsing raw S3 log file for DANDI."""
 
 import collections
-import datetime
-import importlib.metadata
 import os
 import pathlib
 import random
@@ -17,7 +15,7 @@ import pandas
 import tqdm
 from pydantic import DirectoryPath, Field, FilePath, validate_call
 
-from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
+from ._error_collection import _collect_error
 from ._s3_log_file_reducer import reduce_raw_s3_log
 
 
@@ -201,24 +199,10 @@ def _multi_worker_reduce_dandi_raw_s3_log(
     to a log file.
     """
     try:
-        error_message = ""
-
         asset_id_handler = _get_default_dandi_asset_id_handler()
 
         worker_index = os.getpid() % maximum_number_of_workers
         per_worker_temporary_folder_path = temporary_folder_path / f"worker_{worker_index}"
-
-        # Define error catching stuff as part of the try clause
-        # so that if there is a problem within that, it too is caught
-        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
-        errors_folder_path.mkdir(exist_ok=True)
-
-        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
-        date = datetime.datetime.now().strftime("%y%m%d")
-        parallel_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_parallel_errors.txt"
-        error_message += (
-            f"Worker index {worker_index}/{maximum_number_of_workers} reducing {raw_s3_log_file_path} failed due to\n\n"
-        )
 
         reduce_dandi_raw_s3_log(
             raw_s3_log_file_path=raw_s3_log_file_path,
@@ -232,9 +216,13 @@ def _multi_worker_reduce_dandi_raw_s3_log(
             ),
         )
     except Exception as exception:
-        with open(file=parallel_errors_file_path, mode="a") as io:
-            error_message += f"{type(exception)}: {exception!s}\n\n{traceback.format_exc()}\n\n"
-            io.write(error_message)
+        message = (
+            f"Worker index {worker_index}/{maximum_number_of_workers} reducing {raw_s3_log_file_path} failed!\n\n"
+            f"{type(exception)}: {exception!s}\n\n"
+            f"{traceback.format_exc()}"
+        )
+        task_id = str(uuid.uuid4())[:5]
+        _collect_error(message=message, error_type="parallel", task_id=task_id)
 
 
 @validate_call
