@@ -31,7 +31,7 @@ def reduce_all_dandi_raw_s3_logs(
 
     Assumes the following folder structure...
 
-    |- <base_raw_s3_log_folder_path>
+    |- <raw_s3_log_folder_path>
     |-- 2019 (year)
     |--- 01 (month)
     |---- 01.log (day)

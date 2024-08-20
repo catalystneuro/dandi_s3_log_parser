@@ -45,6 +45,13 @@ from ._dandiset_mapper import map_reduced_logs_to_dandisets
     default=1_000,  # 1 GB recommended
 )
 @click.option(
+    "--excluded_years",
+    help="A comma-separated list of years to exclude from parsing.",
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
     "--excluded_ips",
     help="A comma-separated list of IP addresses to exclude from parsing.",
     required=False,
@@ -56,8 +63,10 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     reduced_s3_logs_folder_path: str,
     maximum_number_of_workers: int,
     maximum_buffer_size_in_mb: int,
+    excluded_years: str | None,
     excluded_ips: str | None,
 ) -> None:
+    split_excluded_years = excluded_years.split(",") if excluded_years is not None else list()
     split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
@@ -69,6 +78,7 @@ def _reduce_all_dandi_raw_s3_logs_cli(
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
         maximum_number_of_workers=maximum_number_of_workers,
         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes,
+        excluded_years=split_excluded_years,
         excluded_ips=handled_excluded_ips,
     )
 
