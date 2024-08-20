@@ -192,8 +192,12 @@ def _fast_dandi_reduce_raw_s3_log_line(
         reduced_s3_log_line = f"{timestamp}\t{ip_address}\t{object_key}\t{bytes_sent}\n"
 
         return reduced_s3_log_line
-    except Exception:
-        message = f"Error during fast reduction of line '{raw_s3_log_line}'"
+    except Exception as exception:
+        message = (
+            f"Error during fast reduction of line '{raw_s3_log_line}'\n"
+            f"{type(exception)}: {exception}\n"
+            f"{traceback.format_exc()}"
+        )
         _collect_error(message=message, error_type="fast_line_reduction", task_id=task_id)
 
         return None
@@ -212,9 +216,7 @@ def _reduce_raw_s3_log_line(
         full_log_line = _get_full_log_line(parsed_s3_log_line=parsed_s3_log_line)
     except Exception as exception:
         message = (
-            f"Error parsing line: {raw_s3_log_line}\n\n"
-            f"{type(exception)}: str{exception}\n\n"
-            f"{traceback.format_exc()}",
+            f"Error parsing line: {raw_s3_log_line}\n" f"{type(exception)}: {exception}\n" f"{traceback.format_exc()}",
         )
         _collect_error(message=message, error_type="line_reduction", task_id=task_id)
 
