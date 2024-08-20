@@ -92,7 +92,7 @@ def reduce_raw_s3_log(
 
     assert raw_s3_log_file_path.suffix == ".log", f"`{raw_s3_log_file_path=}` should end in '.log'!"
 
-    if set(fields_to_reduce) == {"object_key", "timestamp", "bytes_sent", "ip_address"}:
+    if set(fields_to_reduce) != {"object_key", "timestamp", "bytes_sent", "ip_address"}:
         raise NotImplementedError("This function is not yet generalized for custom field reduction.")
 
     buffered_text_reader = BufferedTextReader(
