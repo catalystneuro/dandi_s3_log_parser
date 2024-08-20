@@ -105,12 +105,12 @@ def reduce_raw_s3_log(
     )
 
     task_id = str(uuid.uuid4())[:5]
-    fast_fields_case = set(fields_to_reduce) == {"object_key", "timestamp", "bytes_sent", "ip_address"} and set(
-        object_key_parents_to_reduce
-    ) == {
+    fast_fields_to_reduce = set(fields_to_reduce) == {"object_key", "timestamp", "bytes_sent", "ip_address"}
+    fast_object_key_parents_to_reduce = set(object_key_parents_to_reduce) == {
         "blobs",
         "zarr",
     }  # Admittedly, this is particular to DANDI
+    fast_fields_case = fast_fields_to_reduce and fast_object_key_parents_to_reduce
     if fast_fields_case is True:
         reduced_s3_log_lines = [
             reduced_s3_log_line
