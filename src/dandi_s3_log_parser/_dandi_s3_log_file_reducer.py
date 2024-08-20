@@ -71,7 +71,7 @@ def reduce_all_dandi_raw_s3_logs(
         reduced_year_path.mkdir(exist_ok=True)
 
         for month in range(1, 13):
-            reduced_month_path = reduced_s3_logs_folder_path / str(month).zfill(2)
+            reduced_month_path = reduced_year_path / str(month).zfill(2)
             reduced_month_path.mkdir(exist_ok=True)
 
     relative_s3_log_file_paths = [
