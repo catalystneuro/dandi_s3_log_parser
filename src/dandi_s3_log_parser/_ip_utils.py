@@ -74,7 +74,7 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
     except Exception as exception:  # pragma: no cover
         message = (
             f"Error fetching IP information for {ip_address}!\n\n"
-            f"{type(exception)}: {exception!s}\n\n"
+            f"{type(exception)}: {exception}\n\n"
             f"{traceback.format_exc()}",
         )
         _collect_error(message=message, error_type="ipinfo")

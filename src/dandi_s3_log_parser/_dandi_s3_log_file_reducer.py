@@ -218,7 +218,7 @@ def _multi_worker_reduce_dandi_raw_s3_log(
     except Exception as exception:
         message = (
             f"Worker index {worker_index}/{maximum_number_of_workers} reducing {raw_s3_log_file_path} failed!\n\n"
-            f"{type(exception)}: {exception!s}\n\n"
+            f"{type(exception)}: {exception}\n\n"
             f"{traceback.format_exc()}"
         )
         task_id = str(uuid.uuid4())[:5]

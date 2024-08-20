@@ -14,6 +14,7 @@ The strategy is to...
 import collections
 import datetime
 import pathlib
+import traceback
 from collections.abc import Callable
 from typing import Literal
 
@@ -149,8 +150,16 @@ def _parse_s3_log_line(*, raw_line: str) -> list[str]:
     if number_of_parsed_items <= 26:
         return parsed_log_line
 
-    potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
-    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
+    try:
+        potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
+        parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
+    except Exception as exception:
+        message = (
+            f"Error parsing line: {raw_line}\n\n" f"{type(exception)}: str{exception}\n\n" f"{traceback.format_exc()}",
+        )
+        _collect_error(message=message, error_type="line_cleaning")
+
+        raise exception
 
     return parsed_log_line
 
