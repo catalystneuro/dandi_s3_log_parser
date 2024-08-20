@@ -13,12 +13,12 @@ The strategy is to...
 
 import collections
 import datetime
-import importlib.metadata
 import pathlib
+import traceback
 from collections.abc import Callable
 from typing import Literal
 
-from ._config import DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH
+from ._error_collection import _collect_error
 from ._globals import (
     _IS_OPERATION_TYPE_KNOWN,
     _KNOWN_OPERATION_TYPES,
@@ -35,7 +35,6 @@ def _append_reduced_log_line(
     operation_type: Literal[_KNOWN_OPERATION_TYPES],
     excluded_ips: collections.defaultdict[str, bool],
     asset_id_handler: Callable,
-    lines_errors_file_path: pathlib.Path,
     line_index: int,
     log_file_path: pathlib.Path,
     task_id: str,
@@ -63,8 +62,6 @@ def _append_reduced_log_line(
         The type of operation to filter for.
     excluded_ips : collections.defaultdict of strings to booleans
         A lookup table / hash map whose keys are IP addresses and values are True to exclude from parsing.
-    lines_errors_file_path: pathlib.Path
-        The path to the file where line errors are being collected.
     line_index: int
         The index of the line in the raw log file.
     log_file_path: pathlib.Path
@@ -92,28 +89,25 @@ def _append_reduced_log_line(
     # Apply some minimal validation and contribute any invalidations to error collection
     # These might slow parsing down a bit, but could be important to ensuring accuracy
     if not full_log_line.status_code.isdigit():
-        message = (
-            f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}.\n\n"
-        )
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
+        message = f"Unexpected status code: '{full_log_line.status_code}' on line {line_index} of file {log_file_path}."
+        _collect_error(message=message, error_type="line", task_id=task_id)
+
         return None
 
     if _IS_OPERATION_TYPE_KNOWN[full_log_line.operation] is False:
         message = (
             f"Unexpected request type: '{full_log_line.operation}' on line {line_index} of file {log_file_path}.\n\n"
         )
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
+        _collect_error(message=message, error_type="line", task_id=task_id)
+
         return None
 
     timezone = full_log_line.timestamp[-5:]
     is_timezone_utc = timezone != "+0000"
     if is_timezone_utc:
         message = f"Unexpected time shift attached to log! Have always seen '+0000', found `{timezone=}`.\n\n"
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(message)
-        # Fine to continue here; just wanted to be made aware if ever difference so can try to investigate why
+        _collect_error(message=message, error_type="line", task_id=task_id)
+        # Fine to proceed; just wanted to be made aware if there is ever a difference so can try to investigate why
 
     # More early skip conditions after validation
     # Only accept 200-block status codes
@@ -156,8 +150,16 @@ def _parse_s3_log_line(*, raw_line: str) -> list[str]:
     if number_of_parsed_items <= 26:
         return parsed_log_line
 
-    potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
-    parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
+    try:
+        potentially_cleaned_raw_line = _attempt_to_remove_quotes(raw_line=raw_line, bad_parsed_line=parsed_log_line)
+        parsed_log_line = [a or b or c for a, b, c in _S3_LOG_REGEX.findall(string=potentially_cleaned_raw_line)]
+    except Exception as exception:
+        message = (
+            f"Error parsing line: {raw_line}\n\n" f"{type(exception)}: str{exception}\n\n" f"{traceback.format_exc()}",
+        )
+        _collect_error(message=message, error_type="line_cleaning")
+
+        raise exception
 
     return parsed_log_line
 
@@ -234,15 +236,8 @@ def _get_full_log_line(
     # Deviant log entry; usually some very ill-formed content in the URI
     # Dump information to a log file in the base folder for easy sharing
     if full_log_line is None:  # pragma: no cover
-        errors_folder_path = DANDI_S3_LOG_PARSER_BASE_FOLDER_PATH / "errors"
-        errors_folder_path.mkdir(exist_ok=True)
-
-        dandi_s3_log_parser_version = importlib.metadata.version(distribution_name="dandi_s3_log_parser")
-        date = datetime.datetime.now().strftime("%y%m%d")
-        lines_errors_file_path = errors_folder_path / f"v{dandi_s3_log_parser_version}_{date}_line_errors_{task_id}.txt"
-
         # TODO: automatically attempt to anonymize any detectable IP address in the raw line by replacing with 192.0.2.0
-        with open(file=lines_errors_file_path, mode="a") as io:
-            io.write(f"Line {line_index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}\n\n")
+        message = f"Line {line_index} of {log_file_path} (parsed {number_of_parsed_items} items): {raw_line}"
+        _collect_error(message=message, error_type="line", task_id=task_id)
 
     return full_log_line
