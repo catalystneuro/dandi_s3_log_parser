@@ -66,8 +66,8 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     excluded_years: str | None,
     excluded_ips: str | None,
 ) -> None:
-    split_excluded_years = excluded_years.split(",") if excluded_years is not None else list()
-    split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else list()
+    split_excluded_years = excluded_years.split(",") if excluded_years is not None else []
+    split_excluded_ips = excluded_ips.split(",") if excluded_ips is not None else []
     handled_excluded_ips = collections.defaultdict(bool) if len(split_excluded_ips) != 0 else None
     for excluded_ip in split_excluded_ips:
         handled_excluded_ips[excluded_ip] = True

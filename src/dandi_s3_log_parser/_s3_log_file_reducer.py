@@ -2,6 +2,7 @@
 
 import collections
 import datetime
+import pathlib
 import traceback
 import uuid
 from collections.abc import Callable
@@ -20,7 +21,7 @@ from ._s3_log_line_parser import _get_full_log_line, _parse_s3_log_line
 def reduce_raw_s3_log(
     *,
     raw_s3_log_file_path: FilePath,
-    reduced_s3_log_file_path: FilePath,
+    reduced_s3_log_file_path: pathlib.Path,
     fields_to_reduce: list[Literal[_S3_LOG_FIELDS]] | None = None,
     object_key_parents_to_reduce: list[str] | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
