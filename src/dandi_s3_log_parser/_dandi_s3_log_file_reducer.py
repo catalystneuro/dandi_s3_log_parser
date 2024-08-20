@@ -77,7 +77,7 @@ def reduce_all_dandi_raw_s3_logs(
     relative_s3_log_file_paths = [
         raw_s3_log_file_path.relative_to(raw_s3_logs_folder_path)
         for raw_s3_log_file_path in raw_s3_logs_folder_path.rglob(pattern="*.log")
-        if raw_s3_log_file_path.stem.isdigit()
+        if raw_s3_log_file_path.stem.isdigit() and raw_s3_log_file_path.parent.parent.name in years_to_reduce
     ]
     relative_s3_log_file_paths_to_reduce = [
         relative_s3_log_file_path
