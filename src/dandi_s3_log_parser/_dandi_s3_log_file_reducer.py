@@ -128,8 +128,6 @@ def reduce_all_dandi_raw_s3_logs(
                         _multi_worker_reduce_dandi_raw_s3_log,
                         raw_s3_log_file_path=raw_s3_log_file_path,
                         reduced_s3_log_file_path=reduced_s3_log_file_path,
-                        fields_to_reduce=fields_to_reduce,
-                        object_key_parents_to_reduce=object_key_parents_to_reduce,
                         maximum_number_of_workers=maximum_number_of_workers,
                         maximum_buffer_size_in_bytes=maximum_buffer_size_in_bytes_per_worker,
                         excluded_ips=excluded_ips,
