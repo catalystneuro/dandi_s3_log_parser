@@ -135,8 +135,13 @@ def reduce_raw_s3_log(
             is not None
         ]
 
+    if len(reduced_s3_log_lines) == 0:
+        return None
+
     with open(file=reduced_s3_log_file_path, mode="w") as io:
         io.writelines(reduced_s3_log_lines)
+
+    return None
 
 
 def _fast_dandi_reduce_raw_s3_log_line(
@@ -190,6 +195,8 @@ def _fast_dandi_reduce_raw_s3_log_line(
     except Exception:
         message = f"Error during fast reduction of line '{raw_s3_log_line}'"
         _collect_error(message=message, error_type="fast_line_reduction", task_id=task_id)
+
+        return None
 
 
 def _reduce_raw_s3_log_line(
