@@ -172,7 +172,7 @@ def _is_ip_address_in_cidr(*, ip_address: str, cidr_address: str) -> bool:
     return in_network
 
 
-def _load_ip_hash_to_cache(*, name: Literal["region", "services"]) -> dict[str, str] | dict[str, bool]:
+def _load_ip_hash_cache(*, name: Literal["region", "services"]) -> dict[str, str] | dict[str, bool]:
     """Load the IP hash to region cache from disk."""
     match name:
         case "region":
