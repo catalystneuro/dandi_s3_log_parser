@@ -122,7 +122,7 @@ The `--file_processing_limit < integer >` flag can be used to limit the number o
 bin_all_reduced_s3_logs_by_object_key \
   --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
   --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
-  --file_processing_limit 20
+  --file_limit 20
 ```
 
 ### Mapping
