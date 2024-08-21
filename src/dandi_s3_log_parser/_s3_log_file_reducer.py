@@ -112,6 +112,8 @@ def reduce_raw_s3_log(
     fast_fields_to_reduce = set(fields_to_reduce) == {"object_key", "timestamp", "bytes_sent", "ip_address"}
     fast_object_key_parents_to_reduce = set(object_key_parents_to_reduce) == {"blobs", "zarr"}
     fast_fields_case = fast_fields_to_reduce and fast_object_key_parents_to_reduce
+    # TODO: add dumping to file within comprehension to alleviate RAM accumulation
+    # Would need a start/completed tracking similar to binning to ensure no corruption however
     if fast_fields_case is True:
         reduced_s3_log_lines = [
             reduced_s3_log_line
