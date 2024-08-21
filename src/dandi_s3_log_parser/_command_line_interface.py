@@ -8,7 +8,7 @@ import click
 from ._dandi_s3_log_file_reducer import (
     reduce_all_dandi_raw_s3_logs,
 )
-from ._dandiset_mapper import map_reduced_logs_to_dandisets
+from ._map_all_reduced_s3_logs_to_dandisets import map_all_reduced_s3_logs_to_dandisets
 
 
 @click.command(name="reduce_all_dandi_raw_s3_logs")
@@ -101,7 +101,7 @@ def _reduce_all_dandi_raw_s3_logs_cli(
 def _map_reduced_logs_to_dandisets_cli(
     reduced_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
 ) -> None:
-    map_reduced_logs_to_dandisets(
+    map_all_reduced_s3_logs_to_dandisets(
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
     )
 

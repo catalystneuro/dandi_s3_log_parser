@@ -6,15 +6,15 @@ import py
 import dandi_s3_log_parser
 
 
-def test_map_reduced_logs_to_dandisets(tmpdir: py.path.local):
+def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "mapped_to_dandiset_example_0"
+    examples_folder_path = file_parent / "examples" / "mapped_to_dandisets_example_0"
     reduced_s3_logs_folder_path = examples_folder_path / "binned_logs"
     dandiset_logs_folder_path = tmpdir
 
-    dandi_s3_log_parser.map_reduced_logs_to_dandisets(
+    dandi_s3_log_parser.map_all_reduced_s3_logs_to_dandisets(
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
         dandiset_logs_folder_path=dandiset_logs_folder_path,
     )

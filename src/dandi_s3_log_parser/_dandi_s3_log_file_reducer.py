@@ -64,7 +64,7 @@ def reduce_all_dandi_raw_s3_logs(
     object_key_handler = _get_default_dandi_object_key_handler()
 
     # Ensure all subfolders exist once at the start
-    years_to_reduce = set([str(year) for year in range(2019, int(datetime.datetime.now().strftime("%Y")))]) - set(
+    years_to_reduce = set([str(year) for year in range(2019, int(datetime.datetime.now().strftime("%Y")) + 1)]) - set(
         excluded_years
     )
     for year in years_to_reduce:
