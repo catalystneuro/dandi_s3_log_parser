@@ -195,10 +195,18 @@ def _fast_dandi_reduce_raw_s3_log_line(
         first_post_quote_block = raw_s3_log_line.split('" ')[1].split(" ")
         http_status_code = first_post_quote_block[0]
         bytes_sent = first_post_quote_block[2]
-        if len(first_post_quote_block) != 7 or not http_status_code.isdigit() or not bytes_sent.isdigit():
-            return _reduce_raw_s3_log_line(raw_s3_log_line=raw_s3_log_line, task_id=task_id)
-        elif http_status_code[0] != "2":
+        if http_status_code.isdigit() and len(http_status_code) == 3 and http_status_code[0] != "2":
             return None
+        elif len(first_post_quote_block) != 7 or not http_status_code.isdigit() or not bytes_sent.isdigit():
+            from ._dandi_s3_log_file_reducer import _get_default_dandi_object_key_handler
+
+            return _reduce_raw_s3_log_line(
+                raw_s3_log_line=raw_s3_log_line,
+                operation_type=operation_type,
+                excluded_ips=excluded_ips,
+                object_key_handler=_get_default_dandi_object_key_handler(),
+                task_id=task_id,
+            )
 
         # Forget about timezone for fast case
         timestamp = datetime.datetime.strptime("".join(split_by_space[2:3]), "[%d/%b/%Y:%H:%M:%S").isoformat()
