@@ -61,7 +61,8 @@ def get_region_from_ip_address(
             cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
 
             if any(
-                _is_ip_address_in_cidr(ip_address=ip_address, cidr_address=cidr_address)
+                # _is_ip_address_in_cidr(ip_address=ip_address, cidr_address=cidr_address)
+                ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
                 for cidr_address in cidr_addresses
             ):
                 ip_hash_to_region[ip_hash] = service_name
