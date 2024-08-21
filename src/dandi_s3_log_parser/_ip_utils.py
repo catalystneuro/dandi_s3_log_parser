@@ -43,7 +43,7 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
     ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
 
     # Early return for speed
-    lookup_result = ip_hash_to_region.get(ip_hash)
+    lookup_result = ip_hash_to_region.get(ip_hash, None)
     if lookup_result is not None:
         return lookup_result
 
