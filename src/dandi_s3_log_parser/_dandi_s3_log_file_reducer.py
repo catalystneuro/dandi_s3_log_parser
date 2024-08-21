@@ -67,20 +67,9 @@ def reduce_all_dandi_raw_s3_logs(
         if raw_s3_log_file_path.stem.isdigit()
     ]
 
-    # Ensure all subfolders exist once at the start
-    # years_and_months_to_reduce = {
-    #     (relative_s3_log_file_path.parent.parent.name, relative_s3_log_file_path.parent.name)
-    #     for relative_s3_log_file_path in relative_s3_log_file_paths
-    # } - set(excluded_years)
-    # for years_and_months_to_reduce in years_and_months_to_reduce:
-    #     year, month = years_and_months_to_reduce
-    #     reduced_year_and_month_path = reduced_s3_logs_folder_path / year / month
-    #     reduced_year_and_month_path.mkdir(parents=True, exist_ok=True)
-    # years_to_reduce = {year_and_month_to_reduce[0] for year_and_month_to_reduce in years_and_months_to_reduce}
-
     years_to_reduce = {
         relative_s3_log_file_path.parent.parent.name for relative_s3_log_file_path in relative_s3_log_file_paths
-    }
+    } - set(excluded_years)
     relative_s3_log_file_paths_to_reduce = [
         relative_s3_log_file_path
         for relative_s3_log_file_path in relative_s3_log_file_paths
