@@ -113,7 +113,7 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
 
 @click.command(name="map_all_reduced_s3_logs_to_dandisets")
 @click.option(
-    "--reduced_s3_logs_folder_path",
+    "--binned_s3_logs_folder_path",
     help="",
     required=True,
     type=click.Path(writable=False),
@@ -125,10 +125,10 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     type=click.Path(writable=False),
 )
 def _map_all_reduced_s3_logs_to_dandisets_cli(
-    reduced_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
+    binned_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
 ) -> None:
     map_all_reduced_s3_logs_to_dandisets(
-        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
+        binned_s3_logs_folder_path=binned_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
     )
 
     return None

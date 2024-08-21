@@ -15,7 +15,7 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
     dandiset_logs_folder_path = tmpdir
 
     dandi_s3_log_parser.map_all_reduced_s3_logs_to_dandisets(
-        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
+        binned_s3_logs_folder_path=reduced_s3_logs_folder_path,
         dandiset_logs_folder_path=dandiset_logs_folder_path,
     )
 

@@ -11,7 +11,7 @@ from ._ip_utils import _load_ip_hash_to_region_cache, get_region_from_ip_address
 
 @validate_call
 def map_all_reduced_s3_logs_to_dandisets(
-    reduced_s3_logs_folder_path: DirectoryPath, dandiset_logs_folder_path: DirectoryPath
+    binned_s3_logs_folder_path: DirectoryPath, dandiset_logs_folder_path: DirectoryPath
 ) -> None:
     """
     Iterate over all dandisets and create a single .tsv per dandiset version containing reduced log for all assets.
@@ -20,7 +20,7 @@ def map_all_reduced_s3_logs_to_dandisets(
 
     Parameters
     ----------
-    reduced_s3_logs_folder_path : DirectoryPath
+    binned_s3_logs_folder_path : DirectoryPath
         The path to the folder containing the reduced S3 log files.
     dandiset_logs_folder_path : DirectoryPath
         The path to the folder where the mapped logs will be saved.
@@ -51,7 +51,7 @@ def map_all_reduced_s3_logs_to_dandisets(
     ):
         _map_reduced_logs_to_dandiset(
             dandiset=dandiset,
-            reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
+            reduced_s3_logs_folder_path=binned_s3_logs_folder_path,
             dandiset_logs_folder_path=dandiset_logs_folder_path,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
