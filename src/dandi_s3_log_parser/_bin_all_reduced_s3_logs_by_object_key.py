@@ -3,6 +3,7 @@
 import pathlib
 
 import pandas
+import tqdm
 from pydantic import DirectoryPath, validate_call
 
 
@@ -48,8 +49,16 @@ def bin_all_reduced_s3_logs_by_object_key(
             )
     completed = completed or set()
 
-    reduced_s3_log_files = set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed
-    for reduced_s3_log_file in reduced_s3_log_files:
+    reduced_s3_log_files = list(set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed)
+    for reduced_s3_log_file in tqdm.tqdm(
+        iterable=reduced_s3_log_files,
+        total=len(reduced_s3_log_files),
+        desc="Binning reduced logs...",
+        position=0,
+        leave=True,
+        mininterval=3.0,
+        smoothing=0,
+    ):
         with open(file=started_tracking_file_path, mode="a") as started_tracking_file:
             started_tracking_file.write(f"{reduced_s3_log_file}: 1\n")
 
