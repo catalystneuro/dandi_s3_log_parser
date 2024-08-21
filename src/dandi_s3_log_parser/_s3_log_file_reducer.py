@@ -21,7 +21,7 @@ from ._s3_log_line_parser import _get_full_log_line, _parse_s3_log_line
 def reduce_raw_s3_log(
     *,
     raw_s3_log_file_path: FilePath,
-    reduced_s3_log_file_path: pathlib.Path,
+    reduced_s3_log_file_path: str | pathlib.Path,  # Not a FilePath because we are creating it
     fields_to_reduce: list[Literal[_S3_LOG_FIELDS]] | None = None,
     object_key_parents_to_reduce: list[str] | None = None,
     maximum_buffer_size_in_bytes: int = 4 * 10**9,
@@ -131,7 +131,15 @@ def reduce_raw_s3_log(
             reduced_s3_log_line
             for raw_s3_log_lines_buffer in progress_bar_iterator
             for raw_s3_log_line in raw_s3_log_lines_buffer
-            if (reduced_s3_log_line := _reduce_raw_s3_log_line(raw_s3_log_line=raw_s3_log_line, task_id=task_id))
+            if (
+                reduced_s3_log_line := _reduce_raw_s3_log_line(
+                    raw_s3_log_line=raw_s3_log_line,
+                    operation_type=operation_type,
+                    excluded_ips=excluded_ips,
+                    object_key_handler=object_key_handler,
+                    task_id=task_id,
+                )
+            )
             is not None
         ]
 
@@ -231,8 +239,8 @@ def _reduce_raw_s3_log_line(
 
     # Apply some minimal validation and contribute any invalidations to error collection
     # These might slow parsing down a bit, but could be important to ensuring accuracy
-    if not full_log_line.status_code.isdigit():
-        message = f"Unexpected status code: '{full_log_line.status_code}' parsed from line '{raw_s3_log_line}'."
+    if not full_log_line.http_status_code.isdigit():
+        message = f"Unexpected status code: '{full_log_line.http_status_code}' parsed from line '{raw_s3_log_line}'."
         _collect_error(message=message, error_type="line", task_id=task_id)
 
         return None
@@ -252,7 +260,7 @@ def _reduce_raw_s3_log_line(
 
     # More early skip conditions after validation
     # Only accept 200-block status codes
-    if full_log_line.status_code[0] != "2":
+    if full_log_line.http_status_code[0] != "2":
         return None
 
     if full_log_line.operation != operation_type:
@@ -262,7 +270,7 @@ def _reduce_raw_s3_log_line(
         return None
 
     # All early skip conditions done; the line is parsed so bin the reduced information by handled asset ID
-    handled_object_key = object_key_handler(raw_asset_id=full_log_line.asset_id)
+    handled_object_key = object_key_handler(object_key=full_log_line.object_key)
     handled_timestamp = datetime.datetime.strptime(full_log_line.timestamp[:-6], "%d/%b/%Y:%H:%M:%S").isoformat()
     handled_bytes_sent = int(full_log_line.bytes_sent) if full_log_line.bytes_sent != "-" else 0
 

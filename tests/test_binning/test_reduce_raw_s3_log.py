@@ -6,7 +6,7 @@ import py
 import dandi_s3_log_parser
 
 
-def test_reduce_dandi_raw_s3_log_example_0(tmpdir: py.path.local) -> None:
+def test_reduce_raw_s3_log_example_0(tmpdir: py.path.local) -> None:
     """
     Most basic test of functionality.
 

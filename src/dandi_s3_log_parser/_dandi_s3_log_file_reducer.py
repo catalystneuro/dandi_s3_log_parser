@@ -4,6 +4,7 @@ import collections
 import datetime
 import os
 import random
+import shutil
 import traceback
 import uuid
 from collections.abc import Callable
@@ -102,7 +103,9 @@ def reduce_all_dandi_raw_s3_logs(
             smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
         ):
             raw_s3_log_file_path = raw_s3_logs_folder_path / relative_s3_log_file_path
-            reduced_s3_log_file_path = reduced_s3_logs_folder_path / relative_s3_log_file_path
+            reduced_s3_log_file_path = (
+                reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv"
+            )
 
             reduce_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
@@ -121,7 +124,11 @@ def reduce_all_dandi_raw_s3_logs(
         with ProcessPoolExecutor(max_workers=maximum_number_of_workers) as executor:
             for relative_s3_log_file_path in relative_s3_log_file_paths_to_reduce:
                 raw_s3_log_file_path = raw_s3_logs_folder_path / relative_s3_log_file_path
-                reduced_s3_log_file_path = reduced_s3_logs_folder_path / relative_s3_log_file_path
+                reduced_s3_log_file_path = (
+                    reduced_s3_logs_folder_path
+                    / relative_s3_log_file_path.parent
+                    / f"{relative_s3_log_file_path.stem}.tsv"
+                )
 
                 futures.append(
                     executor.submit(
@@ -145,6 +152,16 @@ def reduce_all_dandi_raw_s3_logs(
             )
             for future in progress_bar_iterable:
                 future.result()  # This is the call that finally triggers the deployment to the workers
+
+    # Final step: clean any empty directories
+    for year in years_to_reduce:
+        reduced_year_folder_path = reduced_s3_logs_folder_path / year
+        for month in range(1, 13):
+            reduced_month_folder_path = reduced_year_folder_path / str(month).zfill(2)
+            if not any(reduced_month_folder_path.iterdir()):
+                shutil.rmtree(path=reduced_month_folder_path, ignore_errors=True)
+        if not any(reduced_year_folder_path.iterdir()):
+            shutil.rmtree(path=reduced_year_folder_path, ignore_errors=True)
 
     return None
 
