@@ -141,10 +141,14 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     default=None,
 )
 def _map_binned_s3_logs_to_dandisets_cli(
-    binned_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path, dandiset_limit: int | None
+    binned_s3_logs_folder_path: pathlib.Path,
+    dandiset_logs_folder_path: pathlib.Path,
+    dandiset_limit: int | None,
 ) -> None:
     map_binned_s3_logs_to_dandisets(
-        binned_s3_logs_folder_path=binned_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
+        binned_s3_logs_folder_path=binned_s3_logs_folder_path,
+        dandiset_logs_folder_path=dandiset_logs_folder_path,
+        dandiset_limit=dandiset_limit,
     )
 
     return None
