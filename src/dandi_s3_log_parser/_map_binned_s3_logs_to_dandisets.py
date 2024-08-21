@@ -39,6 +39,8 @@ def map_binned_s3_logs_to_dandisets(
 
     # TODO: cache all applicable DANDI API calls
 
+    # TODO: add mtime record for binned files to determine if update is needed
+
     client = dandi.dandiapi.DandiAPIClient()
 
     ip_hash_to_region = _load_ip_hash_to_region_cache()

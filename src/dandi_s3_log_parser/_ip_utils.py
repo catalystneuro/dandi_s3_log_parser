@@ -39,6 +39,14 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
         raise ValueError(message)  # pragma: no cover
     ip_hash_salt = bytes.fromhex(os.environ["IP_HASH_SALT"])
 
+    # Probably a legitimate user, so fetch the geographic region
+    ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
+
+    # Early return for speed
+    lookup_result = ip_hash_to_region.get(ip_hash)
+    if lookup_result is not None:
+        return lookup_result
+
     # Determine if IP address belongs to GitHub, AWS, Google, or known VPNs
     # Azure not yet easily doable; keep an eye on
     # https://learn.microsoft.com/en-us/answers/questions/1410071/up-to-date-azure-public-api-to-get-azure-ip-ranges
@@ -51,15 +59,8 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
             ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
             for cidr_address in cidr_addresses
         ):
+            ip_hash_to_region[ip_hash] = service_name
             return service_name
-
-    # Probably a legitimate user, so fetch the geographic region
-    ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
-
-    # Early return for speed
-    lookup_result = ip_hash_to_region.get(ip_hash)
-    if lookup_result is not None:
-        return lookup_result
 
     # Log errors in IP fetching
     # Lines cannot be covered without testing on a real IP
