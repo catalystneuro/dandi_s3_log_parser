@@ -79,20 +79,6 @@ def reduce_all_dandi_raw_s3_logs(
         and relative_s3_log_file_path.parent.parent.name in years_to_reduce
     ]
 
-    print(f"{relative_s3_log_file_paths_to_reduce=}")
-
-    test = [
-        (
-            reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv",
-            not (
-                reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv"
-            ).exists(),
-        )
-        for relative_s3_log_file_path in relative_s3_log_file_paths
-        if relative_s3_log_file_path.parent.parent.name in years_to_reduce
-    ]
-    print(f"{test=}")
-
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     random.shuffle(relative_s3_log_file_paths_to_reduce)
 
