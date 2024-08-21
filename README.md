@@ -40,7 +40,7 @@ pip install dandi_s3_log_parser
 
 The process is comprised of three modular steps.
 
-### 1. **Reduction.**
+### 1. **Reduction**
 
 Filter out:
 
@@ -54,7 +54,7 @@ In summer of 2024, this reduced 6 TB of raw logs to around 200 GB.
 
 The process is designed to be easily parallelized and interruptible, meaning that you can feel free to kill any processes while they are running and restart later without losing most progress.
 
-### 2. **Binning.**
+### 2. **Binning**
 
 To make the mapping to Dandisets more efficient, the reduced logs are binned by their object keys (asset blob IDs) for fast lookup.
 
@@ -62,7 +62,7 @@ This step reduces the total file sizes from step (1) even further by reducing re
 
 In summer of 2024, this reduced 200 GB of reduced logs to around 20 GB.
 
-### 3. **Mapping.**
+### 3. **Mapping**
 
 The final step, which should be run periodically to keep the desired usage logs per Dandiset up to date, is to scan through all currently known Dandisets and their versions, mapping the asset blob IDs to their filenames and generating the most recently parsed usage logs that can be shared publicly.
 
