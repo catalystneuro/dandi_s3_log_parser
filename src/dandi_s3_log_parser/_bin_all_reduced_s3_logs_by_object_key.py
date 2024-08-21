@@ -22,22 +22,37 @@ def bin_all_reduced_s3_logs_by_object_key(
     binned_s3_logs_folder_path : str
         The path to write each binned S3 log file to.
     """
-    # TODO: add two status tracking YAML files
-    # 1) reduced_log_file_paths_started.yaml
-    # 2) reduced_log_file_paths_completed.yaml
-    # Throw warning on start of this function if they disagree (indicating error occurred, most likely during I/O stage)
-    # All reduced logs will likely need to be freshly re-binned in this case
-    # (by manually removing or renaming the 'binned' target directory to start off empty)
-    #
-    # But if all goes well, then use those file paths to skip over already completed binning
-    #
-    # Although; there was no guarantee that the binned contents were chronological, so maybe also
-    # add a final step (with flag to disable) to re-write all binned logs in chronological order?
-    #
-    # Thought: since we're doing this non-parallel, we could just iterate the reduced logs in chronological order
+    started_tracking_file_path = binned_s3_logs_folder_path / "binned_log_file_paths_started.txt"
+    completed_tracking_file_path = binned_s3_logs_folder_path / "binned_log_file_paths_completed.txt"
 
-    reduced_s3_log_files = reduced_s3_logs_folder_path.rglob("*.tsv")
+    if started_tracking_file_path.exists() != completed_tracking_file_path.exists():
+        raise FileNotFoundError(
+            "One of the tracking files is missing, indicating corruption in the binning process. "
+            "Please clean the binning directory and re-run this function."
+        )
+
+    completed = None
+    if not started_tracking_file_path.exists():
+        started_tracking_file_path.touch()
+        completed_tracking_file_path.touch()
+    else:
+        with open(file=started_tracking_file_path, mode="r") as io:
+            started = set(io.readlines())
+        with open(file=completed_tracking_file_path, mode="r") as io:
+            completed = set(io.readlines())
+
+        if started != completed:
+            raise ValueError(
+                "The tracking files do not agree on the state of the binning process. "
+                "Please clean the binning directory and re-run this function."
+            )
+    completed = completed or set()
+
+    reduced_s3_log_files = set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed
     for reduced_s3_log_file in reduced_s3_log_files:
+        with open(file=started_tracking_file_path, mode="a") as started_tracking_file:
+            started_tracking_file.write(f"{reduced_s3_log_file}: 1\n")
+
         reduced_data_frame = pandas.read_csv(filepath_or_buffer=reduced_s3_log_file, sep="\t")
         binned_data_frame = reduced_data_frame.groupby("object_key").agg(
             {
@@ -65,3 +80,6 @@ def bin_all_reduced_s3_logs_by_object_key(
 
             header = False if binned_s3_log_file_path.exists() else True
             data_frame.to_csv(path_or_buf=binned_s3_log_file_path, mode="a", sep="\t", header=header, index=False)
+
+        with open(file=completed_tracking_file_path, mode="a") as started_tracking_file:
+            started_tracking_file.write(f"{reduced_s3_log_file}\n")
