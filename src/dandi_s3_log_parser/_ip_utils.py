@@ -5,18 +5,23 @@ import hashlib
 import ipaddress
 import os
 import traceback
+from typing import Literal
 
 import ipinfo
 import requests
 import yaml
 
 from ._config import (
+    _IP_HASH_NOT_IN_SERVICES_FILE_PATH,
     _IP_HASH_TO_REGION_FILE_PATH,
 )
 from ._error_collection import _collect_error
+from ._globals import _KNOWN_SERVICES
 
 
-def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str]) -> str | None:
+def get_region_from_ip_address(
+    ip_address: str, ip_hash_to_region: dict[str, str], ip_hash_not_in_services: dict[str, bool]
+) -> str | None:
     """
     If the parsed S3 logs are meant to be shared openly, the remote IP could be used to directly identify individuals.
 
@@ -51,15 +56,17 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
     # Azure not yet easily doable; keep an eye on
     # https://learn.microsoft.com/en-us/answers/questions/1410071/up-to-date-azure-public-api-to-get-azure-ip-ranges
     # and others, maybe it will change in the future
-    known_services = ["GitHub", "AWS", "GCP", "VPN"]
-    for service_name in known_services:
-        cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
+    if ip_hash_not_in_services.get(ip_hash, None) is None:
+        for service_name in _KNOWN_SERVICES:
+            cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
 
-        if any(
-            _is_ip_address_in_cidr(ip_address=ip_address, cidr_address=cidr_address) for cidr_address in cidr_addresses
-        ):
-            ip_hash_to_region[ip_hash] = service_name
-            return service_name
+            if any(
+                _is_ip_address_in_cidr(ip_address=ip_address, cidr_address=cidr_address)
+                for cidr_address in cidr_addresses
+            ):
+                ip_hash_to_region[ip_hash] = service_name
+                return service_name
+    ip_hash_not_in_services[ip_hash] = True
 
     # Log errors in IP fetching
     # Lines cannot be covered without testing on a real IP
@@ -165,16 +172,33 @@ def _is_ip_address_in_cidr(*, ip_address: str, cidr_address: str) -> bool:
     return in_network
 
 
-def _load_ip_hash_to_region_cache() -> dict[str, str]:
+def _load_ip_hash_to_cache(*, name: Literal["region", "services"]) -> dict[str, str] | dict[str, bool]:
     """Load the IP hash to region cache from disk."""
-    if not _IP_HASH_TO_REGION_FILE_PATH.exists():
-        return {}  # pragma: no cover
+    match name:
+        case "region":
+            if not _IP_HASH_TO_REGION_FILE_PATH.exists():
+                return {}  # pragma: no cover
 
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH) as stream:
-        return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+            with open(file=_IP_HASH_TO_REGION_FILE_PATH) as stream:
+                return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+        case "services":
+            if not _IP_HASH_NOT_IN_SERVICES_FILE_PATH.exists():
+                return {}  # pragma: no cover
+
+            with open(file=_IP_HASH_NOT_IN_SERVICES_FILE_PATH) as stream:
+                return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+        case _:
+            raise ValueError(f"Name '{name}' is not recognized!")  # pragma: no cover
 
 
-def _save_ip_hash_to_region_cache(*, ip_hash_to_region: dict[str, str]) -> None:
+def _save_ip_hash_cache(*, name: Literal["region", "services"], ip_cache: dict[str, str] | dict[str, bool]) -> None:
     """Save the IP hash to region cache to disk."""
-    with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
-        yaml.dump(data=ip_hash_to_region, stream=stream)
+    match name:
+        case "region":
+            with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
+                yaml.dump(data=ip_cache, stream=stream)
+        case "services":
+            with open(file=_IP_HASH_NOT_IN_SERVICES_FILE_PATH, mode="w") as stream:
+                yaml.dump(data=ip_cache, stream=stream)
+        case _:
+            raise ValueError(f"Name '{name}' is not recognized!")  # pragma: no cover

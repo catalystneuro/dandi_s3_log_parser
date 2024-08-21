@@ -105,3 +105,5 @@ _S3_LOG_FIELDS = (
 _FullLogLine = collections.namedtuple("FullLogLine", _S3_LOG_FIELDS)
 
 _S3_LOG_REGEX = re.compile(pattern=r'"([^"]+)"|\[([^]]+)]|([^ ]+)')
+
+_KNOWN_SERVICES = ("GitHub", "AWS", "GCP", "VPN")  # Azure has problems; see _ip_utils.py for more info

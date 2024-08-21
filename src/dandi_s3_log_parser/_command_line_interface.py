@@ -133,6 +133,13 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     required=True,
     type=click.Path(writable=False),
 )
+@click.option(
+    "--dandiset_limit",
+    help="The maximum number of Dandisets to process per call.",
+    required=False,
+    type=int,
+    default=None,
+)
 def _map_binned_s3_logs_to_dandisets_cli(
     binned_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
 ) -> None:

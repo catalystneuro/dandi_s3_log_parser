@@ -6,12 +6,14 @@ import pandas
 import tqdm
 from pydantic import DirectoryPath, validate_call
 
-from ._ip_utils import _load_ip_hash_to_region_cache, get_region_from_ip_address
+from ._ip_utils import _load_ip_hash_cache, _save_ip_hash_cache, get_region_from_ip_address
 
 
 @validate_call
 def map_binned_s3_logs_to_dandisets(
-    binned_s3_logs_folder_path: DirectoryPath, dandiset_logs_folder_path: DirectoryPath
+    binned_s3_logs_folder_path: DirectoryPath,
+    dandiset_logs_folder_path: DirectoryPath,
+    dandiset_limit: int | None = None,
 ) -> None:
     """
     Iterate over all dandisets and create a single .tsv per dandiset version containing reduced log for all assets.
@@ -24,6 +26,8 @@ def map_binned_s3_logs_to_dandisets(
         The path to the folder containing the reduced S3 log files.
     dandiset_logs_folder_path : DirectoryPath
         The path to the folder where the mapped logs will be saved.
+    dandiset_limit : int, optional
+        The maximum number of Dandisets to process per call.
     """
     if "IPINFO_CREDENTIALS" not in os.environ:
         message = "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
@@ -43,8 +47,9 @@ def map_binned_s3_logs_to_dandisets(
 
     client = dandi.dandiapi.DandiAPIClient()
 
-    ip_hash_to_region = _load_ip_hash_to_region_cache()
-    current_dandisets = list(client.get_dandisets())
+    ip_hash_to_region = _load_ip_hash_cache(name="region")
+    ip_hash_not_in_services = _load_ip_hash_cache(name="services")
+    current_dandisets = list(client.get_dandisets())[:dandiset_limit]
     for dandiset in tqdm.tqdm(
         iterable=current_dandisets,
         total=len(current_dandisets),
@@ -59,7 +64,11 @@ def map_binned_s3_logs_to_dandisets(
             dandiset_logs_folder_path=dandiset_logs_folder_path,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
+            ip_hash_not_in_services=ip_hash_not_in_services,
         )
+
+        _save_ip_hash_cache(name="region", ip_cache=ip_hash_to_region)
+        _save_ip_hash_cache(name="services", ip_cache=ip_hash_not_in_services)
 
 
 def _map_reduced_logs_to_dandiset(
@@ -68,6 +77,7 @@ def _map_reduced_logs_to_dandiset(
     dandiset_logs_folder_path: pathlib.Path,
     client: dandi.dandiapi.DandiAPIClient,
     ip_hash_to_region: dict[str, str],
+    ip_hash_not_in_services: dict[str, bool],
 ) -> None:
     dandiset_id = dandiset.identifier
 
@@ -96,7 +106,11 @@ def _map_reduced_logs_to_dandiset(
             reduced_s3_log = pandas.read_table(filepath_or_buffer=reduced_s3_log_file_path, header=0)
             reduced_s3_log["filename"] = [asset.path] * len(reduced_s3_log)
             reduced_s3_log["region"] = [
-                get_region_from_ip_address(ip_address=ip_address, ip_hash_to_region=ip_hash_to_region)
+                get_region_from_ip_address(
+                    ip_address=ip_address,
+                    ip_hash_to_region=ip_hash_to_region,
+                    ip_hash_not_in_services=ip_hash_not_in_services,
+                )
                 for ip_address in reduced_s3_log["ip_address"]
             ]
 
