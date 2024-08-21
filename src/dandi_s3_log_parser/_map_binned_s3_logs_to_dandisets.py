@@ -37,6 +37,8 @@ def map_binned_s3_logs_to_dandisets(
         )
         raise ValueError(message)  # pragma: no cover
 
+    # TODO: cache all applicable DANDI API calls
+
     client = dandi.dandiapi.DandiAPIClient()
 
     ip_hash_to_region = _load_ip_hash_to_region_cache()

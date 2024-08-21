@@ -82,7 +82,15 @@ def bin_all_reduced_s3_logs_by_object_key(
         }
         del binned_data_frame
 
-        for object_key, data in object_keys_to_data.items():
+        for object_key, data in tqdm.tqdm(
+            iterable=object_keys_to_data.items(),
+            total=len(object_keys_to_data),
+            desc="Writing binned logs...",
+            position=1,
+            leave=False,
+            mininterval=3.0,
+            smoothing=0,
+        ):
             object_key_as_path = pathlib.Path(object_key)
             binned_s3_log_file_path = (
                 binned_s3_logs_folder_path / object_key_as_path.parent / f"{object_key_as_path.stem}.tsv"
