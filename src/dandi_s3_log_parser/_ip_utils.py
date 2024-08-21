@@ -61,7 +61,6 @@ def get_region_from_ip_address(
             cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
 
             if any(
-                # _is_ip_address_in_cidr(ip_address=ip_address, cidr_address=cidr_address)
                 ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
                 for cidr_address in cidr_addresses
             ):
@@ -151,26 +150,6 @@ def _get_cidr_address_ranges(*, service_name: str) -> list[str]:
             return vpn_cidr_addresses
         case _:
             raise ValueError(f"Service name '{service_name}' is not supported!")  # pragma: no cover
-
-
-def _is_ip_address_in_cidr(*, ip_address: str, cidr_address: str) -> bool:
-    """
-    Check if an IP address is within a CIDR range.
-
-    Should be faster than the syntactically simpler:
-
-    ```python
-    ipaddress.ip_address(ip_address) in ipaddress.ip_network(cidr_range)
-    ```
-    """
-    ip_network = ipaddress.ip_network(address=cidr_address)
-    binary_network_address = int(ip_network.network_address)
-    binary_network_mask = int(ip_network.netmask)
-
-    binary_ip = int(ipaddress.ip_address(address=ip_address))
-
-    in_network = (binary_ip & binary_network_mask) == binary_network_address
-    return in_network
 
 
 def _load_ip_hash_cache(*, name: Literal["region", "services"]) -> dict[str, str] | dict[str, bool]:
