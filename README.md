@@ -19,6 +19,8 @@ Extraction of minimal information from consolidated raw S3 logs for public shari
 
 Developed for the [DANDI Archive](https://dandiarchive.org/).
 
+Read more about [S3 logging on AWS](https://web.archive.org/web/20240807191829/https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html).
+
 A few summary facts as of 2024:
 
 - A single line of a raw S3 log file can be between 400-1000+ bytes.
