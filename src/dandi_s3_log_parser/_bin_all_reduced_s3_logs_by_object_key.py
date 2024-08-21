@@ -20,7 +20,7 @@ from pydantic import DirectoryPath, validate_call
 
 
 @validate_call
-def bin_all_reduced_logs_by_object_key(
+def bin_all_reduced_s3_logs_by_object_key(
     *,
     reduced_s3_logs_folder_path: DirectoryPath,
     binned_s3_logs_folder_path: DirectoryPath,
