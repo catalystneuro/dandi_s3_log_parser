@@ -121,7 +121,11 @@ def _get_cidr_address_ranges(*, service_name: str) -> list[str]:
             return aws_cidr_addresses
         case "GCP":
             gcp_cidr_request = requests.get(url="https://www.gstatic.com/ipranges/cloud.json").json()
-            gcp_cidr_addresses = [prefix["ipv4Prefix"] for prefix in gcp_cidr_request["prefixes"]]
+            gcp_cidr_addresses = [
+                prefix["ipv4Prefix"]
+                for prefix in gcp_cidr_request["prefixes"]
+                if "ipv4Prefix" in prefix  # Not handling IPv6 yet
+            ]
 
             return gcp_cidr_addresses
         case "Azure":
