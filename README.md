@@ -26,11 +26,7 @@ A few summary facts as of 2024:
 - A single line of a raw S3 log file can be between 400-1000+ bytes.
 - Some of the busiest daily logs on the archive can have around 5,014,386 lines.
 - There are more than 6 TB of log files collected in total.
-- This parser reduces that total to around 20 GB of essential information.
-
-The reduced information is then additionally mapped to currently available assets in persistent published Dandiset versions and current drafts, which only comprise around 100 MB of the original data.
-
-These small Dandiset-specific summaries are soon to be shared publicly.
+- This parser reduces that total to around 100 MB of essential information.
 
 
 
@@ -42,71 +38,114 @@ pip install dandi_s3_log_parser
 
 
 
+## Workflow
+
+The process is comprised of three modular steps.
+
+### 1. **Reduction**
+
+Filter out:
+
+- Non-success status codes.
+- Excluded IP addresses.
+- Operation types other than the one specified (`REST.GET.OBJECT` by default).
+
+Then, only limit data extraction to a handful of specified fields from each full line of the raw logs; by default, `object_key`, `timestamp`, `ip_address`, and `bytes_sent`.
+
+In summer of 2024, this reduced 6 TB of raw logs to around 200 GB.
+
+The process is designed to be easily parallelized and interruptible, meaning that you can feel free to kill any processes while they are running and restart later without losing most progress.
+
+### 2. **Binning**
+
+To make the mapping to Dandisets more efficient, the reduced logs are binned by their object keys (asset blob IDs) for fast lookup.
+
+This step reduces the total file sizes from step (1) even further by reducing repeated object keys, though it does create a large number of small files.
+
+In summer of 2024, this reduced 200 GB of reduced logs to around 20 GB.
+
+### 3. **Mapping**
+
+The final step, which should be run periodically to keep the desired usage logs per Dandiset up to date, is to scan through all currently known Dandisets and their versions, mapping the asset blob IDs to their filenames and generating the most recently parsed usage logs that can be shared publicly.
+
+In summer of 2024, this reduced 20 GB of binned logs to around 100 MB of Dandiset logs.
+
+
+
 ## Usage
 
-### Reduce entire history
+### Reduction
 
-To iteratively parse all historical logs all at once (parallelization strongly recommended):
+To reduce:
 
 ```bash
 reduce_all_dandi_raw_s3_logs \
-  --base_raw_s3_logs_folder_path < base log folder > \
-  --reduced_s3_logs_folder_path < output folder > \
-  --maximum_number_of_workers < number of CPUs to use > \
+  --raw_s3_logs_folder_path < base raw S3 logs folder > \
+  --reduced_s3_logs_folder_path < reduced S3 logs folder path > \
+  --maximum_number_of_workers < number of workers to use > \
   --maximum_buffer_size_in_mb < approximate amount of RAM to use > \
-    --excluded_ips < comma-separated list of known IPs to exclude >
-```
-
-For example, on Drogon:
-
-```bash
-reduce_all_dandi_raw_s3_logs \
-  --base_raw_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs \
-  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
-  --maximum_number_of_workers 6 \
-  --maximum_buffer_size_in_mb 5000 \
-  --excluded_ips < Drogons IP >
-```
-
-### Reduce a single log file
-
-To parse only a single log file at a time, such as in a CRON job:
-
-```bash
-reduce_dandi_raw_s3_log \
-  --raw_s3_log_file_path < s3 log file path > \
-  --reduced_s3_logs_folder_path < output folder > \
   --excluded_ips < comma-separated list of known IPs to exclude >
 ```
 
 For example, on Drogon:
 
 ```bash
-reduce_dandi_raw_s3_log \
-  --raw_s3_log_file_path /mnt/backup/dandi/dandiarchive-logs/2024/08/17.log \
-  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
+reduce_all_dandi_raw_s3_logs \
+  --raw_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
+  --maximum_number_of_workers 3 \
+  --maximum_buffer_size_in_mb 3000 \
   --excluded_ips < Drogons IP >
 ```
 
-### Map to Dandisets
+### Binning
 
-The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
+To bin:
 
 ```bash
-map_reduced_logs_to_dandisets \
-  --reduced_s3_logs_folder_path < reduced s3 logs folder path > \
-  --dandiset_logs_folder_path < mapped logs folder >
+bin_all_reduced_s3_logs_by_object_key \
+  --reduced_s3_logs_folder_path < reduced S3 logs folder path > \
+  --binned_s3_logs_folder_path < binned S3 logs folder path >
 ```
 
 For example, on Drogon:
 
 ```bash
-map_reduced_logs_to_dandisets \
-  --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/parsed_8_15_2024/REST_GET_OBJECT_per_asset_id \
-  --dandiset_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-cody/mapped_logs_8_15_2024
+bin_all_reduced_s3_logs_by_object_key \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs
+```
+
+This process is not as friendly to random interruption as the reduction step is. If corruption is detected, the target binning folder will have to be cleaned before re-attempting.
+
+The `--file_processing_limit < integer >` flag can be used to limit the number of files processed in a single run, which can be useful for breaking the process up into resumable pieces, such as:
+
+```bash
+bin_all_reduced_s3_logs_by_object_key \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
+  --file_limit 20
+```
+
+### Mapping
+
+The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
+
+```bash
+map_binned_s3_logs_to_dandisets \
+  --binned_s3_logs_folder_path < binned S3 logs folder path > \
+  --dandiset_logs_folder_path < mapped Dandiset logs folder >
+```
+
+For example, on Drogon:
+
+```bash
+map_binned_s3_logs_to_dandisets \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
+  --dandiset_logs_folder_path /mnt/backup/dandi/mapped-dandiset-logs
 ```
 
 
 ## Submit line decoding errors
 
-Please email line decoding errors collected from your local config file to the core maintainer before raising issues or submitting PRs contributing them as examples, to more easily correct any aspects that might require anonymization.
+Please email line decoding errors collected from your local config file (located in `~/.dandi_s3_log_parser/errors`) to the core maintainer before raising issues or submitting PRs contributing them as examples, to more easily correct any aspects that might require anonymization.
