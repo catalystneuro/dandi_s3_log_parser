@@ -5,6 +5,7 @@ import pathlib
 
 import click
 
+from ._bin_all_reduced_s3_logs_by_object_key import bin_all_reduced_s3_logs_by_object_key
 from ._dandi_s3_log_file_reducer import (
     reduce_all_dandi_raw_s3_logs,
 )
@@ -85,7 +86,32 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     return None
 
 
-@click.command(name="map_reduced_logs_to_dandisets")
+@click.command(name="bin_all_reduced_s3_logs_by_object_key")
+@click.option(
+    "--reduced_s3_logs_folder_path",
+    help="The path to the folder containing all raw S3 log files.",
+    required=True,
+    type=click.Path(writable=False),
+)
+@click.option(
+    "--binned_s3_logs_folder_path",
+    help="The path to write each reduced S3 log file to. There will be one file per handled asset ID.",
+    required=True,
+    type=click.Path(writable=True),
+)
+def _bin_all_reduced_s3_logs_by_object_key_cli(
+    reduced_s3_logs_folder_path: str,
+    binned_s3_logs_folder_path: str,
+) -> None:
+    bin_all_reduced_s3_logs_by_object_key(
+        reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
+        binned_s3_logs_folder_path=binned_s3_logs_folder_path,
+    )
+
+    return None
+
+
+@click.command(name="map_all_reduced_s3_logs_to_dandisets")
 @click.option(
     "--reduced_s3_logs_folder_path",
     help="",
@@ -98,7 +124,7 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     required=True,
     type=click.Path(writable=False),
 )
-def _map_reduced_logs_to_dandisets_cli(
+def _map_all_reduced_s3_logs_to_dandisets_cli(
     reduced_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
 ) -> None:
     map_all_reduced_s3_logs_to_dandisets(
