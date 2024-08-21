@@ -101,7 +101,7 @@ reduce_all_dandi_raw_s3_logs \
 To bin:
 
 ```bash
-bin_all_reduced__s3_logs \
+bin_all_reduced_s3_logs \
   --reduced_s3_logs_folder_path < reduced S3 logs folder path > \
   --binned_s3_logs_folder_path < binned S3 logs folder path >
 ```
@@ -109,7 +109,7 @@ bin_all_reduced__s3_logs \
 For example, on Drogon:
 
 ```bash
-bin_all_reduced__s3_logs \
+bin_all_reduced_s3_logs \
   --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
   --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs
 ```
