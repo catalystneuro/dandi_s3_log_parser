@@ -1,5 +1,6 @@
 """Various private utility functions for handling IP address related tasks."""
 
+import functools
 import hashlib
 import ipaddress
 import os
@@ -8,7 +9,6 @@ import traceback
 import ipinfo
 import requests
 import yaml
-from pydantic import FilePath
 
 from ._config import (
     _IP_HASH_TO_REGION_FILE_PATH,
@@ -39,6 +39,21 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
         raise ValueError(message)  # pragma: no cover
     ip_hash_salt = bytes.fromhex(os.environ["IP_HASH_SALT"])
 
+    # Determine if IP address belongs to GitHub, AWS, Google, or known VPNs
+    # Azure not yet easily doable; keep an eye on
+    # https://learn.microsoft.com/en-us/answers/questions/1410071/up-to-date-azure-public-api-to-get-azure-ip-ranges
+    # and others, maybe it will change in the future
+    known_services = ["GitHub", "AWS", "GCP", "VPN"]
+    for service_name in known_services:
+        cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
+
+        if any(
+            ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
+            for cidr_address in cidr_addresses
+        ):
+            return service_name
+
+    # Probably a legitimate user, so fetch the geographic region
     ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
 
     # Early return for speed
@@ -82,35 +97,48 @@ def get_region_from_ip_address(ip_address: str, ip_hash_to_region: dict[str, str
         return "unknown"
 
 
-def _cidr_address_to_ip_range(*, cidr_address: str) -> list[str]:
-    """Convert a CIDR address to a list of IP addresses."""
-    cidr_address_class = type(ipaddress.ip_address(cidr_address.split("/")[0]))
-    ip_address_range = []
-    if cidr_address_class is ipaddress.IPv4Address:
-        ip_address_range = ipaddress.IPv4Network(address=cidr_address)
-    elif cidr_address_class is ipaddress.IPv6Address:  # pragma: no cover
-        ip_address_range = ipaddress.IPv6Network(address=cidr_address)
+@functools.lru_cache
+def _get_cidr_address_ranges(*, service_name: str) -> list[str]:
+    match service_name:
+        case "GitHub":
+            github_cidr_request = requests.get(url="https://api.github.com/meta").json()
+            skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
+            keys = set(github_cidr_request.keys()) - set(skip_keys)
+            github_cidr_addresses = [
+                cidr_address
+                for key in keys
+                for cidr_address in github_cidr_request[key]
+                if "::" not in cidr_address
+                # Skip IPv6
+            ]
 
-    return [str(ip_address) for ip_address in ip_address_range]
+            return github_cidr_addresses
+        # Note: these endpoints also return the 'locations' of the specific subnet, such as 'us-east-2'
+        case "AWS":
+            aws_cidr_request = requests.get(url="https://ip-ranges.amazonaws.com/ip-ranges.json").json()
+            aws_cidr_addresses = [prefix["ip_prefix"] for prefix in aws_cidr_request["prefixes"]]
 
+            return aws_cidr_addresses
+        case "GCP":
+            gcp_cidr_request = requests.get(url="https://www.gstatic.com/ipranges/cloud.json").json()
+            gcp_cidr_addresses = [prefix["ipv4Prefix"] for prefix in gcp_cidr_request["prefixes"]]
 
-def _get_latest_github_ip_ranges() -> list[str]:
-    """Retrieve the latest GitHub CIDR ranges from their API and expand them into a list of IP addresses."""
-    github_ip_request = requests.get("https://api.github.com/meta").json()
+            return gcp_cidr_addresses
+        case "Azure":
+            raise NotImplementedError("Azure CIDR address fetching is not yet implemented!")  # pragma: no cover
+        case "VPN":
+            # Very nice public and maintained listing! Hope this stays stable.
+            vpn_cidr_addresses = (
+                requests.get(
+                    url="https://raw.githubusercontent.com/josephrocca/is-vpn/main/vpn-or-datacenter-ipv4-ranges.txt"
+                )
+                .content.decode("utf-8")
+                .splitlines()
+            )
 
-    skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
-    keys = set(github_ip_request.keys()) - set(skip_keys)
-    github_cidr_addresses = [
-        cidr_address for key in keys for cidr_address in github_ip_request[key] if "::" not in cidr_address  # Skip IPv6
-    ]
-
-    all_github_ips = [
-        str(ip_address)
-        for cidr_address in github_cidr_addresses
-        for ip_address in _cidr_address_to_ip_range(cidr_address=cidr_address)
-    ]
-
-    return all_github_ips
+            return vpn_cidr_addresses
+        case _:
+            raise ValueError(f"Service name '{service_name}' is not supported!")  # pragma: no cover
 
 
 def _load_ip_hash_to_region_cache() -> dict[str, str]:
@@ -125,15 +153,4 @@ def _load_ip_hash_to_region_cache() -> dict[str, str]:
 def _save_ip_hash_to_region_cache(*, ip_hash_to_region: dict[str, str]) -> None:
     """Save the IP hash to region cache to disk."""
     with open(file=_IP_HASH_TO_REGION_FILE_PATH, mode="w") as stream:
-        yaml.dump(data=ip_hash_to_region, stream=stream)
-
-
-def _save_ip_address_to_region_cache(
-    ip_hash_to_region: dict[str, str],
-    ip_hash_to_region_file_path: FilePath | None = None,
-) -> None:
-    """Save the IP address to region cache to disk."""
-    ip_hash_to_region_file_path = ip_hash_to_region_file_path or _IP_HASH_TO_REGION_FILE_PATH
-
-    with open(file=ip_hash_to_region_file_path, mode="w") as stream:
         yaml.dump(data=ip_hash_to_region, stream=stream)
