@@ -68,22 +68,29 @@ def reduce_all_dandi_raw_s3_logs(
     ]
 
     # Ensure all subfolders exist once at the start
-    years_and_months_to_reduce = {
-        (relative_s3_log_file_path.parent.parent, relative_s3_log_file_paths.parent)
-        for relative_s3_log_file_path in relative_s3_log_file_paths
-    } - set(excluded_years)
-    for years_and_months_to_reduce in years_and_months_to_reduce:
-        year, month = years_and_months_to_reduce
-        reduced_year_and_month_path = reduced_s3_logs_folder_path / year / month
-        reduced_year_and_month_path.mkdir(parents=True, exist_ok=True)
-    years_to_reduce = {year for year, _ in years_and_months_to_reduce}
+    # years_and_months_to_reduce = {
+    #     (relative_s3_log_file_path.parent.parent.name, relative_s3_log_file_path.parent.name)
+    #     for relative_s3_log_file_path in relative_s3_log_file_paths
+    # } - set(excluded_years)
+    # for years_and_months_to_reduce in years_and_months_to_reduce:
+    #     year, month = years_and_months_to_reduce
+    #     reduced_year_and_month_path = reduced_s3_logs_folder_path / year / month
+    #     reduced_year_and_month_path.mkdir(parents=True, exist_ok=True)
+    # years_to_reduce = {year_and_month_to_reduce[0] for year_and_month_to_reduce in years_and_months_to_reduce}
 
+    years_to_reduce = {
+        relative_s3_log_file_path.parent.parent.name for relative_s3_log_file_path in relative_s3_log_file_paths
+    }
     relative_s3_log_file_paths_to_reduce = [
         relative_s3_log_file_path
         for relative_s3_log_file_path in relative_s3_log_file_paths
         if not (reduced_s3_logs_folder_path / relative_s3_log_file_path).exists()
-        and relative_s3_log_file_path.parent.parent in years_to_reduce
+        and relative_s3_log_file_path.parent.parent not in years_to_reduce
     ]
+    print("\n")
+    print(f"{years_to_reduce=}")
+    print(f"{relative_s3_log_file_paths_to_reduce=}")
+    print(f"{relative_s3_log_file_paths=}")
 
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
     random.shuffle(relative_s3_log_file_paths_to_reduce)
@@ -105,6 +112,7 @@ def reduce_all_dandi_raw_s3_logs(
             reduced_s3_log_file_path = (
                 reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv"
             )
+            reduced_s3_log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
             reduce_raw_s3_log(
                 raw_s3_log_file_path=raw_s3_log_file_path,
@@ -128,6 +136,7 @@ def reduce_all_dandi_raw_s3_logs(
                     / relative_s3_log_file_path.parent
                     / f"{relative_s3_log_file_path.stem}.tsv"
                 )
+                reduced_s3_log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
                 futures.append(
                     executor.submit(
