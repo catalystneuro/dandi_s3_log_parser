@@ -99,13 +99,22 @@ def _reduce_all_dandi_raw_s3_logs_cli(
     required=True,
     type=click.Path(writable=True),
 )
+@click.option(
+    "--file_processing_limit",
+    help="The maximum number of files to process per call.",
+    required=False,
+    type=int,
+    default=None,
+)
 def _bin_all_reduced_s3_logs_by_object_key_cli(
     reduced_s3_logs_folder_path: str,
     binned_s3_logs_folder_path: str,
+    file_processing_limit: int | None,
 ) -> None:
     bin_all_reduced_s3_logs_by_object_key(
         reduced_s3_logs_folder_path=reduced_s3_logs_folder_path,
         binned_s3_logs_folder_path=binned_s3_logs_folder_path,
+        file_processing_limit=file_processing_limit,
     )
 
     return None

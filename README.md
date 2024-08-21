@@ -114,6 +114,17 @@ bin_all_reduced_s3_logs_by_object_key \
   --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs
 ```
 
+This process is not as friendly to random interruption as the reduction step is. If corruption is detected, the target binning folder will have to be cleaned before re-attempting.
+
+The `--file_processing_limit < integer >` flag can be used to limit the number of files processed in a single run, which can be useful for breaking the process up into resumable pieces, such as:
+
+```bash
+bin_all_reduced_s3_logs_by_object_key \
+  --reduced_s3_logs_folder_path /mnt/backup/dandi/reduced-dandiarchive-logs \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
+  --file_processing_limit 20
+```
+
 ### Mapping
 
 The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.

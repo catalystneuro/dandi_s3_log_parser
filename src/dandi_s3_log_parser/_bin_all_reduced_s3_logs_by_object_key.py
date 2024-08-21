@@ -12,6 +12,7 @@ def bin_all_reduced_s3_logs_by_object_key(
     *,
     reduced_s3_logs_folder_path: DirectoryPath,
     binned_s3_logs_folder_path: DirectoryPath,
+    file_processing_limit: int | None = None,
 ) -> None:
     """
     Bin reduced S3 logs by object keys.
@@ -22,6 +23,9 @@ def bin_all_reduced_s3_logs_by_object_key(
         The path to the folder containing the reduced S3 log files.
     binned_s3_logs_folder_path : str
         The path to write each binned S3 log file to.
+        There will be one file per object key.
+    file_processing_limit : int, optional
+        The maximum number of files to process per call.
     """
     started_tracking_file_path = binned_s3_logs_folder_path / "binned_log_file_paths_started.txt"
     completed_tracking_file_path = binned_s3_logs_folder_path / "binned_log_file_paths_completed.txt"
@@ -49,7 +53,7 @@ def bin_all_reduced_s3_logs_by_object_key(
             )
     completed = completed or set()
 
-    reduced_s3_log_files = list(set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed)
+    reduced_s3_log_files = list(set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed)[:file_processing_limit]
     for reduced_s3_log_file in tqdm.tqdm(
         iterable=reduced_s3_log_files,
         total=len(reduced_s3_log_files),
