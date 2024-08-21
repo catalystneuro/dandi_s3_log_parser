@@ -130,7 +130,7 @@ bin_all_reduced_s3_logs_by_object_key \
 The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
 
 ```bash
-map_binned_logs_to_dandisets \
+map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path < binned S3 logs folder path > \
   --dandiset_logs_folder_path < mapped Dandiset logs folder >
 ```
@@ -138,7 +138,7 @@ map_binned_logs_to_dandisets \
 For example, on Drogon:
 
 ```bash
-map_binned_logs_to_dandisets \
+map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
   --dandiset_logs_folder_path /mnt/backup/dandi/mapped-dandiset-logs
 ```
