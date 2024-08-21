@@ -147,7 +147,7 @@ def reduce_raw_s3_log(
         ]
 
     # TODO: generalize header to rely on the selected fields and ensure order matches
-    header = "timestamp\tip_address\tobject_key\tbytes_sent\n"
+    header = "timestamp\tip_address\tobject_key\tbytes_sent\n" if len(reduced_s3_log_lines) != 0 else ""
     with open(file=reduced_s3_log_file_path, mode="w") as io:
         io.write(header)
         io.writelines(reduced_s3_log_lines)
