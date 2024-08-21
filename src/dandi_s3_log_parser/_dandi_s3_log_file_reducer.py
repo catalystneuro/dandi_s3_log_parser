@@ -73,7 +73,9 @@ def reduce_all_dandi_raw_s3_logs(
     relative_s3_log_file_paths_to_reduce = [
         relative_s3_log_file_path
         for relative_s3_log_file_path in relative_s3_log_file_paths
-        if not (reduced_s3_logs_folder_path / relative_s3_log_file_path).exists()
+        if not (
+            reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv"
+        ).exists()
         and relative_s3_log_file_path.parent.parent.name in years_to_reduce
     ]
 
@@ -81,8 +83,10 @@ def reduce_all_dandi_raw_s3_logs(
 
     test = [
         (
-            reduced_s3_logs_folder_path / relative_s3_log_file_path,
-            not (reduced_s3_logs_folder_path / relative_s3_log_file_path).exists(),
+            reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv",
+            not (
+                reduced_s3_logs_folder_path / relative_s3_log_file_path.parent / f"{relative_s3_log_file_path.stem}.tsv"
+            ).exists(),
         )
         for relative_s3_log_file_path in relative_s3_log_file_paths
         if relative_s3_log_file_path.parent.parent.name in years_to_reduce
