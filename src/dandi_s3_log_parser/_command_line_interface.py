@@ -9,7 +9,7 @@ from ._bin_all_reduced_s3_logs_by_object_key import bin_all_reduced_s3_logs_by_o
 from ._dandi_s3_log_file_reducer import (
     reduce_all_dandi_raw_s3_logs,
 )
-from ._map_all_reduced_s3_logs_to_dandisets import map_all_reduced_s3_logs_to_dandisets
+from ._map_binned_s3_logs_to_dandisets import map_binned_s3_logs_to_dandisets
 
 
 @click.command(name="reduce_all_dandi_raw_s3_logs")
@@ -111,7 +111,7 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     return None
 
 
-@click.command(name="map_all_reduced_s3_logs_to_dandisets")
+@click.command(name="map_binned_s3_logs_to_dandisets")
 @click.option(
     "--binned_s3_logs_folder_path",
     help="",
@@ -124,10 +124,10 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     required=True,
     type=click.Path(writable=False),
 )
-def _map_all_reduced_s3_logs_to_dandisets_cli(
+def _map_binned_s3_logs_to_dandisets_cli(
     binned_s3_logs_folder_path: pathlib.Path, dandiset_logs_folder_path: pathlib.Path
 ) -> None:
-    map_all_reduced_s3_logs_to_dandisets(
+    map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=binned_s3_logs_folder_path, dandiset_logs_folder_path=dandiset_logs_folder_path
     )
 

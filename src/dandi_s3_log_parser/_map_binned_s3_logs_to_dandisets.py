@@ -10,7 +10,7 @@ from ._ip_utils import _load_ip_hash_to_region_cache, get_region_from_ip_address
 
 
 @validate_call
-def map_all_reduced_s3_logs_to_dandisets(
+def map_binned_s3_logs_to_dandisets(
     binned_s3_logs_folder_path: DirectoryPath, dandiset_logs_folder_path: DirectoryPath
 ) -> None:
     """

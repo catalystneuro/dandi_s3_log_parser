@@ -39,7 +39,7 @@ classifiers = [
 [project.scripts]
 reduce_all_dandi_raw_s3_logs = "dandi_s3_log_parser._command_line_interface:_reduce_all_dandi_raw_s3_logs_cli"
 bin_all_reduced_s3_logs_by_object_key = "dandi_s3_log_parser._command_line_interface:_bin_all_reduced_s3_logs_by_object_key_cli"
-map_all_reduced_s3_logs_to_dandisets = "dandi_s3_log_parser._command_line_interface:_map_all_reduced_s3_logs_to_dandisets_cli"
+map_binned_s3_logs_to_dandisets = "dandi_s3_log_parser._command_line_interface:_map_binned_s3_logs_to_dandisets_cli"
 
 
 
