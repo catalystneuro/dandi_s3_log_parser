@@ -1,10 +1,8 @@
 """Primary functions for reducing raw S3 log file for DANDI."""
 
 import collections
-import datetime
 import os
 import random
-import shutil
 import traceback
 import uuid
 from collections.abc import Callable
@@ -63,10 +61,16 @@ def reduce_all_dandi_raw_s3_logs(
 
     object_key_handler = _get_default_dandi_object_key_handler()
 
+    relative_s3_log_file_paths = [
+        raw_s3_log_file_path.relative_to(raw_s3_logs_folder_path)
+        for raw_s3_log_file_path in raw_s3_logs_folder_path.rglob(pattern="*.log")
+        if raw_s3_log_file_path.stem.isdigit()
+    ]
+
     # Ensure all subfolders exist once at the start
-    years_to_reduce = set([str(year) for year in range(2019, int(datetime.datetime.now().strftime("%Y")) + 1)]) - set(
-        excluded_years
-    )
+    years_to_reduce = set(
+        relative_s3_log_file_path.parent.parent for relative_s3_log_file_path in relative_s3_log_file_paths
+    ) - set(excluded_years)
     for year in years_to_reduce:
         reduced_year_path = reduced_s3_logs_folder_path / year
         reduced_year_path.mkdir(exist_ok=True)
@@ -75,15 +79,11 @@ def reduce_all_dandi_raw_s3_logs(
             reduced_month_path = reduced_year_path / str(month).zfill(2)
             reduced_month_path.mkdir(exist_ok=True)
 
-    relative_s3_log_file_paths = [
-        raw_s3_log_file_path.relative_to(raw_s3_logs_folder_path)
-        for raw_s3_log_file_path in raw_s3_logs_folder_path.rglob(pattern="*.log")
-        if raw_s3_log_file_path.stem.isdigit() and raw_s3_log_file_path.parent.parent.name in years_to_reduce
-    ]
     relative_s3_log_file_paths_to_reduce = [
         relative_s3_log_file_path
         for relative_s3_log_file_path in relative_s3_log_file_paths
         if not (reduced_s3_logs_folder_path / relative_s3_log_file_path).exists()
+        and relative_s3_log_file_path.parent.parent in years_to_reduce
     ]
 
     # The .rglob is not naturally sorted; shuffle for more uniform progress updates
@@ -153,15 +153,8 @@ def reduce_all_dandi_raw_s3_logs(
             for future in progress_bar_iterable:
                 future.result()  # This is the call that finally triggers the deployment to the workers
 
-    # Final step: clean any empty directories
-    for year in years_to_reduce:
-        reduced_year_folder_path = reduced_s3_logs_folder_path / year
-        for month in range(1, 13):
-            reduced_month_folder_path = reduced_year_folder_path / str(month).zfill(2)
-            if not any(reduced_month_folder_path.iterdir()):
-                shutil.rmtree(path=reduced_month_folder_path, ignore_errors=True)
-        if not any(reduced_year_folder_path.iterdir()):
-            shutil.rmtree(path=reduced_year_folder_path, ignore_errors=True)
+    # Note that empty files and directories are kept to indicate that the file was already reduced and so can be skipped
+    # Even if there is no reduced activity in those files
 
     return None
 
