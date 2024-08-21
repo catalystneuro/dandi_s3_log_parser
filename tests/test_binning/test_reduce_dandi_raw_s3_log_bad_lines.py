@@ -18,11 +18,11 @@ def test_reduce_dandi_raw_s3_log_bad_lines(tmpdir: py.path.local) -> None:
     initial_number_of_error_folder_contents = len(error_folder_contents)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "reduced_example_2"
+    examples_folder_path = file_parent / "examples" / "reduction_example_2"
     example_raw_s3_log_file_path = examples_folder_path / "0.log"
     expected_reduced_s3_logs_folder_path = examples_folder_path / "expected_output"
 
-    test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_2"
+    test_reduced_s3_logs_folder_path = tmpdir / "reduction_example_2"
     test_reduced_s3_logs_folder_path.mkdir(exist_ok=True)
 
     dandi_s3_log_parser.reduce_dandi_raw_s3_log(

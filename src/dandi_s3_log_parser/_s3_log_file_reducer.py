@@ -1,4 +1,4 @@
-"""Primary functions for parsing raw S3 log file for DANDI."""
+"""Primary functions for reducing raw S3 log files."""
 
 import collections
 import datetime
@@ -37,7 +37,8 @@ def reduce_raw_s3_log(
       - Filtering all lines only by the type of operation specified (i.e., REST.GET.OBJECT, REST.PUT.OBJECT, etc.).
       - Filtering out any non-success status codes.
       - Filtering out any excluded IP addresses.
-      - Extracting only the asset ID, request timestamp, request size, and IP address that sent the request.
+      - Extracting only the object key, request timestamp, request size, and IP address that sent the request.
+      - The object keys written to the reduced log file may also be adjusted according to the handler.
 
     Parameters
     ----------
@@ -146,7 +147,10 @@ def reduce_raw_s3_log(
     if len(reduced_s3_log_lines) == 0:
         return None
 
+    # TODO: generalize header to rely on the selected fields and ensure order matches
+    header = "timestamp\tip_address\tobject_key\tbytes_sent\n"
     with open(file=reduced_s3_log_file_path, mode="w") as io:
+        io.write(header)
         io.writelines(reduced_s3_log_lines)
 
     return None

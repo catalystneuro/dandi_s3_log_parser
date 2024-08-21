@@ -1,4 +1,4 @@
-"""Primary functions for parsing raw S3 log file for DANDI."""
+"""Primary functions for reducing raw S3 log file for DANDI."""
 
 import collections
 import datetime

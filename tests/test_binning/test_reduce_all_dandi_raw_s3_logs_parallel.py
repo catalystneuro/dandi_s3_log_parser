@@ -11,10 +11,10 @@ def test_reduce_all_dandi_raw_s3_logs_example_0_parallel(tmpdir: py.path.local) 
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    examples_folder_path = file_parent / "examples" / "reduced_example_1"
+    examples_folder_path = file_parent / "examples" / "reduction_example_1"
     expected_reduced_s3_logs_folder_path = examples_folder_path / "expected_output"
 
-    test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_1"
+    test_reduced_s3_logs_folder_path = tmpdir / "reduction_example_1"
     test_reduced_s3_logs_folder_path.mkdir(exist_ok=True)
 
     dandi_s3_log_parser.reduce_all_dandi_raw_s3_logs(

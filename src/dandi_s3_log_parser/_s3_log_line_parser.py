@@ -1,15 +1,4 @@
-"""
-Primary functions for parsing a single line of a raw S3 log.
-
-The strategy is to...
-
-1) Parse the raw line into a list of strings using a combination of regex patterns and custom string manipulation.
-2) Construct a FullLogLine object from the parsed line. A collections.namedtuple object is used for performance.
-3) Reduce and map the information from the FullLogLine into a collections.defaultdict object.
-   Some of the mapping operations at this step include...
-      - Handling the timestamp in memory as a datetime.datetime object.
-      - Filtering out log lines from excluded IPs.
-"""
+"""Primary functions for parsing a single line of a raw S3 log."""
 
 from ._globals import (
     _S3_LOG_REGEX,

@@ -15,7 +15,7 @@ def test_reduce_raw_s3_log_example_bad_lines_fast_case(tmpdir: py.path.local) ->
     initial_number_of_error_folder_contents = len(error_folder_contents)
 
     file_parent = pathlib.Path(__file__).parent
-    example_folder_path = file_parent / "examples" / "reduced_example_2"
+    example_folder_path = file_parent / "examples" / "reduction_example_2"
     example_raw_s3_log_file_path = example_folder_path / "raw_logs" / "2022" / "04" / "06.log"
 
     test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_bad_lines_fast_case"
@@ -53,7 +53,7 @@ def test_reduce_raw_s3_log_example_bad_lines_basic_case(tmpdir: py.path.local) -
     initial_number_of_error_folder_contents = len(error_folder_contents)
 
     file_parent = pathlib.Path(__file__).parent
-    example_folder_path = file_parent / "examples" / "reduced_example_2"
+    example_folder_path = file_parent / "examples" / "reduction_example_2"
     example_raw_s3_log_file_path = example_folder_path / "raw_logs" / "2022" / "04" / "06.log"
 
     test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_bad_lines_basic_case"

@@ -11,10 +11,10 @@ def test_reduce_all_dandi_raw_s3_logs_example_1(tmpdir: py.path.local) -> None:
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    example_folder_path = file_parent / "examples" / "reduced_example_1"
+    example_folder_path = file_parent / "examples" / "reduction_example_1"
     example_raw_s3_logs_folder_path = example_folder_path / "raw_logs"
 
-    test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_1"
+    test_reduced_s3_logs_folder_path = tmpdir / "reduction_example_1"
     test_reduced_s3_logs_folder_path.mkdir(exist_ok=True)
 
     expected_reduced_s3_logs_folder_path = example_folder_path / "expected_output"

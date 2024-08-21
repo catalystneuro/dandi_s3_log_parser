@@ -16,7 +16,7 @@ def test_reduce_raw_s3_log_example_0_fast_case(tmpdir: py.path.local) -> None:
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    example_folder_path = file_parent / "examples" / "reduced_example_0"
+    example_folder_path = file_parent / "examples" / "reduction_example_0"
     example_raw_s3_log_file_path = example_folder_path / "raw_logs" / "2020" / "01" / "01.log"
 
     test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_0_fast_case"
@@ -44,7 +44,7 @@ def test_reduce_raw_s3_log_example_0_basic_case(tmpdir: py.path.local) -> None:
     tmpdir = pathlib.Path(tmpdir)
 
     file_parent = pathlib.Path(__file__).parent
-    example_folder_path = file_parent / "examples" / "reduced_example_0"
+    example_folder_path = file_parent / "examples" / "reduction_example_0"
     example_raw_s3_log_file_path = example_folder_path / "raw_logs" / "2020" / "01" / "01.log"
 
     test_reduced_s3_logs_folder_path = tmpdir / "reduced_example_0_basic_case"
