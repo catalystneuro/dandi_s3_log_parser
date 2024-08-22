@@ -52,7 +52,7 @@ Filter out:
 
 Then, only limit data extraction to a handful of specified fields from each full line of the raw logs; by default, `object_key`, `timestamp`, `ip_address`, and `bytes_sent`.
 
-In summer of 2024, this reduced 6 TB of raw logs to around 160 GB.
+In summer of 2024, this reduced 6 TB of raw logs to around 170 GB.
 
 The process is designed to be easily parallelized and interruptible, meaning that you can feel free to kill any processes while they are running and restart later without losing most progress.
 
@@ -62,7 +62,7 @@ To make the mapping to Dandisets more efficient, the reduced logs are binned by 
 
 This step reduces the total file sizes from step (1) even further by reducing repeated object keys, though it does create a large number of small files.
 
-In summer of 2024, this reduced 160 GB of reduced logs to around 20 GB.
+In summer of 2024, this reduced 170 GB of reduced logs to around 20 GB.
 
 ### 3. **Mapping**
 
@@ -129,7 +129,7 @@ bin_all_reduced_s3_logs_by_object_key \
   --file_limit 20
 ```
 
-In summer of 2024, this process took less than 3 hours to bin all 160 GB of reduced log data.
+In summer of 2024, this process took less than 5 hours to bin all 170 GB of reduced log data.
 
 ### Mapping
 
