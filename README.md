@@ -98,6 +98,8 @@ reduce_all_dandi_raw_s3_logs \
   --excluded_ips < Drogons IP >
 ```
 
+In summer of 2024, this process took less than 10 hours to process all 6 TB of raw log data (using 3 workers at 3 GB buffer size).
+
 ### Binning
 
 To bin:
@@ -127,6 +129,8 @@ bin_all_reduced_s3_logs_by_object_key \
   --file_limit 20
 ```
 
+In summer of 2024, this process took less than ?? hours to bin all ?? GB of reduced log data.
+
 ### Mapping
 
 The next step, that should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
@@ -144,6 +148,9 @@ map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path /mnt/backup/dandi/binned-dandiarchive-logs \
   --dandiset_logs_folder_path /mnt/backup/dandi/mapped-dandiset-logs
 ```
+
+In summer of 2024, this process took less than ?? hours to run and in the current design should be run fresh on a regular basis to keep the logs up to date.
+
 
 
 ## Submit line decoding errors

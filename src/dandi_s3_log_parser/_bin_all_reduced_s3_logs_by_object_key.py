@@ -42,9 +42,9 @@ def bin_all_reduced_s3_logs_by_object_key(
         completed_tracking_file_path.touch()
     else:
         with open(file=started_tracking_file_path, mode="r") as io:
-            started = set(io.readlines())
+            started = set(pathlib.Path(path) for path in io.readlines())
         with open(file=completed_tracking_file_path, mode="r") as io:
-            completed = set(io.readlines())
+            completed = set(pathlib.Path(path) for path in io.readlines())
 
         if started != completed:
             raise ValueError(
@@ -63,8 +63,13 @@ def bin_all_reduced_s3_logs_by_object_key(
         mininterval=3.0,
         smoothing=0,
     ):
-        with open(file=started_tracking_file_path, mode="a") as started_tracking_file:
-            started_tracking_file.write(f"{reduced_s3_log_file}: 1\n")
+        if reduced_s3_log_file.stat().st_size == 0:
+            with open(file=started_tracking_file_path, mode="a") as io:
+                io.write(f"{reduced_s3_log_file}\n")
+            with open(file=completed_tracking_file_path, mode="a") as io:
+                io.write(f"{reduced_s3_log_file}\n")
+
+            continue
 
         reduced_data_frame = pandas.read_csv(filepath_or_buffer=reduced_s3_log_file, sep="\t")
         binned_data_frame = reduced_data_frame.groupby("object_key").agg(
@@ -81,6 +86,9 @@ def bin_all_reduced_s3_logs_by_object_key(
             for _, row in binned_data_frame.iterrows()
         }
         del binned_data_frame
+
+        with open(file=started_tracking_file_path, mode="a") as io:
+            io.write(f"{reduced_s3_log_file}\n")
 
         for object_key, data in tqdm.tqdm(
             iterable=object_keys_to_data.items(),
@@ -102,5 +110,5 @@ def bin_all_reduced_s3_logs_by_object_key(
             header = False if binned_s3_log_file_path.exists() else True
             data_frame.to_csv(path_or_buf=binned_s3_log_file_path, mode="a", sep="\t", header=header, index=False)
 
-        with open(file=completed_tracking_file_path, mode="a") as started_tracking_file:
-            started_tracking_file.write(f"{reduced_s3_log_file}\n")
+        with open(file=completed_tracking_file_path, mode="a") as io:
+            io.write(f"{reduced_s3_log_file}\n")
