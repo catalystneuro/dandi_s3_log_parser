@@ -2,6 +2,7 @@
 
 import collections
 import pathlib
+from typing import Literal
 
 import click
 
@@ -149,11 +150,13 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
 def _map_binned_s3_logs_to_dandisets_cli(
     binned_s3_logs_folder_path: pathlib.Path,
     dandiset_logs_folder_path: pathlib.Path,
+    object_type: Literal["blobs", "zarr"],
     dandiset_limit: int | None,
 ) -> None:
     map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=binned_s3_logs_folder_path,
         dandiset_logs_folder_path=dandiset_logs_folder_path,
+        object_type=object_type,
         dandiset_limit=dandiset_limit,
     )
 
