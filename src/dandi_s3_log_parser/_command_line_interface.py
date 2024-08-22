@@ -134,6 +134,12 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     type=click.Path(writable=False),
 )
 @click.option(
+    "--object_type",
+    help="The type of objects to map the logs to, as determined by the parents of the object keys.",
+    required=True,
+    type=click.Choice(["blobs", "zarr"]),
+)
+@click.option(
     "--dandiset_limit",
     help="The maximum number of Dandisets to process per call.",
     required=False,

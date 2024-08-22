@@ -137,5 +137,5 @@ def _map_reduced_logs_to_dandiset(
 
         dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
         dandiset_log_folder_path.mkdir(exist_ok=True)
-        version_file_path = dandiset_log_folder_path / f"{version_id}.tsv"
+        version_file_path = dandiset_log_folder_path / f"{version_id}_{object_type}.tsv"
         mapped_log.to_csv(path_or_buf=version_file_path, mode="w", sep="\t", header=True, index=True)
