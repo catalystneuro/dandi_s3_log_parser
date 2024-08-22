@@ -42,7 +42,7 @@ def bin_all_reduced_s3_logs_by_object_key(
         completed_tracking_file_path.touch()
     else:
         with open(file=started_tracking_file_path, mode="r") as io:
-            started = set(pathlib.Path(path) for path in io.readlines())
+            started = set(pathlib.Path(path.rstrip("\n")) for path in io.readlines())
         with open(file=completed_tracking_file_path, mode="r") as io:
             completed = set(pathlib.Path(path.rstrip("\n")) for path in io.readlines())
 
