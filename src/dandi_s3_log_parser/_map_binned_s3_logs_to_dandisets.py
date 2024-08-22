@@ -1,5 +1,6 @@
 import os
 import pathlib
+from typing import Literal
 
 import dandi.dandiapi
 import pandas
@@ -13,6 +14,7 @@ from ._ip_utils import _load_ip_hash_cache, _save_ip_hash_cache, get_region_from
 def map_binned_s3_logs_to_dandisets(
     binned_s3_logs_folder_path: DirectoryPath,
     dandiset_logs_folder_path: DirectoryPath,
+    object_type: Literal["blobs", "zarr"],
     dandiset_limit: int | None = None,
 ) -> None:
     """
@@ -26,6 +28,8 @@ def map_binned_s3_logs_to_dandisets(
         The path to the folder containing the reduced S3 log files.
     dandiset_logs_folder_path : DirectoryPath
         The path to the folder where the mapped logs will be saved.
+    object_type : one of "blobs" or "zarr"
+        The type of objects to map the logs to, as determined by the parents of the object keys.
     dandiset_limit : int, optional
         The maximum number of Dandisets to process per call.
     """
@@ -62,6 +66,7 @@ def map_binned_s3_logs_to_dandisets(
             dandiset=dandiset,
             reduced_s3_logs_folder_path=binned_s3_logs_folder_path,
             dandiset_logs_folder_path=dandiset_logs_folder_path,
+            object_type=object_type,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
             ip_hash_not_in_services=ip_hash_not_in_services,
@@ -75,6 +80,7 @@ def _map_reduced_logs_to_dandiset(
     dandiset: dandi.dandiapi.RemoteDandiset,
     reduced_s3_logs_folder_path: pathlib.Path,
     dandiset_logs_folder_path: pathlib.Path,
+    object_type: Literal["blobs", "zarr"],
     client: dandi.dandiapi.DandiAPIClient,
     ip_hash_to_region: dict[str, str],
     ip_hash_not_in_services: dict[str, bool],
@@ -90,6 +96,11 @@ def _map_reduced_logs_to_dandiset(
         for asset in dandiset_version.get_assets():
             asset_suffixes = pathlib.Path(asset.path).suffixes
             is_asset_zarr = ".zarr" in asset_suffixes
+
+            if is_asset_zarr and object_type == "blobs":
+                continue
+            if not is_asset_zarr and object_type == "zarr":
+                continue
 
             if is_asset_zarr:
                 blob_id = asset.zarr
