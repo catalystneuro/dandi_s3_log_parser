@@ -52,7 +52,7 @@ Filter out:
 
 Then, only limit data extraction to a handful of specified fields from each full line of the raw logs; by default, `object_key`, `timestamp`, `ip_address`, and `bytes_sent`.
 
-In summer of 2024, this reduced 6 TB of raw logs to around 170 GB.
+In summer of 2024, this reduced 6 TB of raw logs to less than 170 GB.
 
 The process is designed to be easily parallelized and interruptible, meaning that you can feel free to kill any processes while they are running and restart later without losing most progress.
 
@@ -62,13 +62,13 @@ To make the mapping to Dandisets more efficient, the reduced logs are binned by 
 
 This step reduces the total file sizes from step (1) even further by reducing repeated object keys, though it does create a large number of small files.
 
-In summer of 2024, this reduced 170 GB of reduced logs to around 20 GB.
+In summer of 2024, this brought 170 GB of reduced logs down to less than 80 GB.
 
 ### 3. **Mapping**
 
 The final step, which should be run periodically to keep the desired usage logs per Dandiset up to date, is to scan through all currently known Dandisets and their versions, mapping the asset blob IDs to their filenames and generating the most recently parsed usage logs that can be shared publicly.
 
-In summer of 2024, this reduced 20 GB of binned logs to around 100 MB of Dandiset logs.
+In summer of 2024, this brought 80 GB of binned logs down to around 20 GB of Dandiset logs.
 
 
 
