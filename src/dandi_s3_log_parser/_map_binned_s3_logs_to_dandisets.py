@@ -135,7 +135,7 @@ def _map_binneded_logs_to_dandiset(
             reordered_reduced_s3_log = reduced_s3_log_binned_by_blob_id.reindex(
                 columns=("timestamp", "bytes_sent", "region")
             )
-            reordered_reduced_s3_log.sort_values(by="timestamp", key=natsort.natsort_keygen())
+            reordered_reduced_s3_log.sort_values(by="timestamp", key=natsort.natsort_keygen(), inplace=True)
             reordered_reduced_s3_log.index = range(len(reordered_reduced_s3_log))
 
             dandiset_version_log_folder_path.mkdir(parents=True, exist_ok=True)
@@ -156,7 +156,7 @@ def _map_binneded_logs_to_dandiset(
         mapped_log_aggregated.rename(columns={"sum": "bytes_sent"}, inplace=True)
 
         mapped_log_binned_per_day = mapped_log_aggregated.reindex(columns=("date", "bytes_sent"))
-        mapped_log_binned_per_day.sort_values(by="date", key=natsort.natsort_keygen())
+        mapped_log_binned_per_day.sort_values(by="date", key=natsort.natsort_keygen(), inplace=True)
 
         summary_file_path = dandiset_version_log_folder_path / "summary.tsv"
         mapped_log_binned_per_day.to_csv(path_or_buf=summary_file_path, mode="w", sep="\t", header=True)
