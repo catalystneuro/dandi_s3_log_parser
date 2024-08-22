@@ -138,7 +138,8 @@ The next step, which should also be updated regularly (daily-weekly), is to iter
 ```bash
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path < binned S3 logs folder path > \
-  --dandiset_logs_folder_path < mapped Dandiset logs folder >
+  --dandiset_logs_folder_path < mapped Dandiset logs folder > \
+  --object_type < blobs or zarr >
 ```
 
 For example, on Drogon:
@@ -146,10 +147,11 @@ For example, on Drogon:
 ```bash
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
-  --dandiset_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped
+  --dandiset_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
+  --object_type blobs
 ```
 
-In the summer of 2024, this process took less than ?? hours to run and in the current design should be run fresh regularly to keep the logs up to date.
+In the summer of 2024, this process took less than ?? hours to run without any activate caches and in the current design should be run fresh regularly to keep the logs up to date. The caches that accumulate over time should help speed up the process over repeated calls.
 
 
 
