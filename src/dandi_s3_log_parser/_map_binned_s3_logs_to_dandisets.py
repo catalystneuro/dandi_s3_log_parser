@@ -100,7 +100,7 @@ def _map_binneded_logs_to_dandiset(
         all_activity_for_version = []
         for asset in dandiset_version.get_assets():
             asset_as_path = pathlib.Path(asset.path)
-            dandi_filename = asset_as_path.name
+            dandi_filename = asset_as_path.stem
             asset_suffixes = asset_as_path.suffixes
 
             is_asset_zarr = ".zarr" in asset_suffixes
