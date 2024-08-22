@@ -65,7 +65,7 @@ def bin_all_reduced_s3_logs_by_object_key(
     ):
         if reduced_s3_log_file.stat().st_size == 0:
             with open(file=started_tracking_file_path, mode="a") as io:
-                io.write(f"{reduced_s3_log_file}: 1\n")
+                io.write(f"{reduced_s3_log_file}\n")
             with open(file=completed_tracking_file_path, mode="a") as io:
                 io.write(f"{reduced_s3_log_file}\n")
 
@@ -88,7 +88,7 @@ def bin_all_reduced_s3_logs_by_object_key(
         del binned_data_frame
 
         with open(file=started_tracking_file_path, mode="a") as io:
-            io.write(f"{reduced_s3_log_file}: 1\n")
+            io.write(f"{reduced_s3_log_file}\n")
 
         for object_key, data in tqdm.tqdm(
             iterable=object_keys_to_data.items(),
