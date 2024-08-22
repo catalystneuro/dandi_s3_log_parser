@@ -62,7 +62,7 @@ To make the mapping to Dandisets more efficient, the reduced logs are binned by 
 
 This step reduces the total file sizes from step (1) even further by reducing repeated object keys, though it does create a large number of small files.
 
-In summer of 2024, this brought 170 GB of reduced logs down to less than 80 GB (20 GB of `blobs` and 60 GB of `zarr`, respectively).
+In summer of 2024, this brought 170 GB of reduced logs down to less than 80 GB (20 GB of `blobs` spread across 253676 files and 60 GB of `zarr` spread across 4775 files).
 
 ### 3. **Mapping**
 
