@@ -55,9 +55,12 @@ def bin_all_reduced_s3_logs_by_object_key(
 
     reduced_s3_log_files = list(set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed)[:file_limit]
 
-    print(f"{reduced_s3_log_files=}")
-    print(f"{set(reduced_s3_logs_folder_path.rglob('*.tsv'))=}")
-    print(f"{completed=}")
+    print(f"{reduced_s3_log_files[:5]=}")
+    print("\n")
+    print(f"{set(reduced_s3_logs_folder_path.rglob('*.tsv'))[:5]=}")
+    print("\n")
+    print(f"{completed[:5]=}")
+    assert False
 
     for reduced_s3_log_file in tqdm.tqdm(
         iterable=reduced_s3_log_files,
