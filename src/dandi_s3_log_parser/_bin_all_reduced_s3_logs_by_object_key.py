@@ -63,12 +63,11 @@ def bin_all_reduced_s3_logs_by_object_key(
         mininterval=3.0,
         smoothing=0,
     ):
-        with open(file=started_tracking_file_path, mode="a") as started_tracking_file:
-            started_tracking_file.write(f"{reduced_s3_log_file}: 1\n")
-
         if reduced_s3_log_file.stat().st_size == 0:
-            with open(file=completed_tracking_file_path, mode="a") as started_tracking_file:
-                started_tracking_file.write(f"{reduced_s3_log_file}\n")
+            with open(file=started_tracking_file_path, mode="a") as io:
+                io.write(f"{reduced_s3_log_file}: 1\n")
+            with open(file=completed_tracking_file_path, mode="a") as io:
+                io.write(f"{reduced_s3_log_file}\n")
 
             continue
 
@@ -87,6 +86,9 @@ def bin_all_reduced_s3_logs_by_object_key(
             for _, row in binned_data_frame.iterrows()
         }
         del binned_data_frame
+
+        with open(file=started_tracking_file_path, mode="a") as io:
+            io.write(f"{reduced_s3_log_file}: 1\n")
 
         for object_key, data in tqdm.tqdm(
             iterable=object_keys_to_data.items(),
@@ -108,5 +110,5 @@ def bin_all_reduced_s3_logs_by_object_key(
             header = False if binned_s3_log_file_path.exists() else True
             data_frame.to_csv(path_or_buf=binned_s3_log_file_path, mode="a", sep="\t", header=header, index=False)
 
-        with open(file=completed_tracking_file_path, mode="a") as started_tracking_file:
-            started_tracking_file.write(f"{reduced_s3_log_file}\n")
+        with open(file=completed_tracking_file_path, mode="a") as io:
+            io.write(f"{reduced_s3_log_file}\n")
