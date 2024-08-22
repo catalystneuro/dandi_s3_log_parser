@@ -99,11 +99,11 @@ def _map_binneded_logs_to_dandiset(
 
         all_activity_for_version = []
         for asset in dandiset_version.get_assets():
-            dandi_filename = asset.path.name
+            asset_as_path = pathlib.Path(asset.path)
+            dandi_filename = asset_as_path.name
+            asset_suffixes = asset_as_path.suffixes
 
-            asset_suffixes = pathlib.Path(dandi_filename).suffixes
             is_asset_zarr = ".zarr" in asset_suffixes
-
             if is_asset_zarr and object_type == "blobs":
                 continue
             if not is_asset_zarr and object_type == "zarr":
