@@ -44,7 +44,7 @@ def bin_all_reduced_s3_logs_by_object_key(
         with open(file=started_tracking_file_path, mode="r") as io:
             started = set(pathlib.Path(path) for path in io.readlines())
         with open(file=completed_tracking_file_path, mode="r") as io:
-            completed = set(pathlib.Path(path) for path in io.readlines())
+            completed = set(pathlib.Path(path.rstrip("\n")) for path in io.readlines())
 
         if started != completed:
             raise ValueError(
@@ -55,6 +55,7 @@ def bin_all_reduced_s3_logs_by_object_key(
 
     reduced_s3_log_files = list(set(reduced_s3_logs_folder_path.rglob("*.tsv")) - completed)[:file_limit]
 
+    print(f"{len(reduced_s3_log_files)=}")
     print(f"{reduced_s3_log_files[:5]=}")
     print("\n")
     print(f"{list(set(reduced_s3_logs_folder_path.rglob('*.tsv')))[:5]=}")
