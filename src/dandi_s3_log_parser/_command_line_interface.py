@@ -141,6 +141,13 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     type=click.Choice(["blobs", "zarr"]),
 )
 @click.option(
+    "--exclude_dandisets",
+    help="A comma-separated list of Dandiset IDs to exclude from processing.",
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
     "--dandiset_limit",
     help="The maximum number of Dandisets to process per call.",
     required=False,
@@ -151,12 +158,16 @@ def _map_binned_s3_logs_to_dandisets_cli(
     binned_s3_logs_folder_path: pathlib.Path,
     mapped_s3_logs_folder_path: pathlib.Path,
     object_type: Literal["blobs", "zarr"],
+    exclude_dandisets: str | None,
     dandiset_limit: int | None,
 ) -> None:
+    split_exclude_dandisets = exclude_dandisets.split(",") if exclude_dandisets is not None else []
+
     map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=binned_s3_logs_folder_path,
         mapped_s3_logs_folder_path=mapped_s3_logs_folder_path,
         object_type=object_type,
+        exclude_dandisets=split_exclude_dandisets,
         dandiset_limit=dandiset_limit,
     )
 
