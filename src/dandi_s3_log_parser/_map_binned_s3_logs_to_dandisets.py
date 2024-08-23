@@ -16,7 +16,8 @@ def map_binned_s3_logs_to_dandisets(
     binned_s3_logs_folder_path: DirectoryPath,
     mapped_s3_logs_folder_path: DirectoryPath,
     object_type: Literal["blobs", "zarr"],
-    exclude_dandisets: list[str] | None = None,
+    excluded_dandisets: list[str] | None = None,
+    included_dandisets: list[str] | None = None,
     dandiset_limit: int | None = None,
 ) -> None:
     """
@@ -34,8 +35,10 @@ def map_binned_s3_logs_to_dandisets(
         The path to the folder where the mapped logs will be saved.
     object_type : one of "blobs" or "zarr"
         The type of objects to map the logs to, as determined by the parents of the object keys.
-    exclude_dandisets : list of str, optional
+    excluded_dandisets : list of str, optional
         A list of Dandiset IDs to exclude from processing.
+    included_dandisets : list of str, optional
+        A list of Dandiset IDs to exclusively process.
     dandiset_limit : int, optional
         The maximum number of Dandisets to process per call.
     """
@@ -51,7 +54,12 @@ def map_binned_s3_logs_to_dandisets(
         )
         raise ValueError(message)  # pragma: no cover
 
-    exclude_dandisets = exclude_dandisets or []
+    if excluded_dandisets is not None and included_dandisets is not None:
+        message = "Only one of 'exclude_dandisets' or 'include_dandisets' can be passed, not both!"
+        raise ValueError(message)
+
+    excluded_dandisets = excluded_dandisets or []
+    included_dandisets = included_dandisets or []
 
     # TODO: add mtime record for binned files to determine if update is needed
 
@@ -59,9 +67,15 @@ def map_binned_s3_logs_to_dandisets(
 
     ip_hash_to_region = _load_ip_hash_cache(name="region")
     ip_hash_not_in_services = _load_ip_hash_cache(name="services")
-    current_dandisets = [
-        dandiset for dandiset in client.get_dandisets() if dandiset.identifier not in exclude_dandisets
-    ][:dandiset_limit]
+
+    if len(included_dandisets) != 0:
+        current_dandisets = [client.get_dandiset(dandiset_id=dandiset_id) for dandiset_id in included_dandisets]
+    else:
+        current_dandisets = [
+            dandiset for dandiset in client.get_dandisets() if dandiset.identifier not in excluded_dandisets
+        ]
+    current_dandisets = current_dandisets[:dandiset_limit]
+
     for dandiset in tqdm.tqdm(
         iterable=current_dandisets,
         total=len(current_dandisets),
