@@ -151,9 +151,9 @@ map_binned_s3_logs_to_dandisets \
   --object_type blobs
 ```
 
-In the summer of 2024, this `blobs` process took less than 8 hours to run with one worker (and could easily be parallelized in the future) without any caches. The caches that accumulate over time help speed up the process over repeated calls - a run with caches took less than ?? hours.
+In the summer of 2024, this `blobs` process took less than 6 hours to run (with caches; 8 hours without caches) with one worker. The process could easily be parallelized if requested.
 
-`zarr` is likely to take longer, but the general process is the same.
+Mapping the `zarr` objects takes much longer (more than 12 hours, and is more memory intensive), but the general process is the same.
 
 
 
