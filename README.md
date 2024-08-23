@@ -151,9 +151,31 @@ map_binned_s3_logs_to_dandisets \
   --object_type blobs
 ```
 
-In the summer of 2024, this `blobs` process took less than 12 hours to run with one worker (could easily be parallelized in the future) without any activate caches. The caches that accumulate over time help speed up the process over repeated calls; a fresh run with caches only took less than ?? hours.
+In the summer of 2024, this blobs process took less than 6 hours to run (with caches; 8 hours without caches) with one worker. The process could easily be parallelized if requested.
 
-`zarr` is likely to take longer, but the general process is the same.
+This process is separated by object type because the process operates at different speeds depending on the nature of the objects and their Dandisets.
+
+For this reason, the command also accepts `--excluded_dandisets` and `--included_dandisets`. This is strongly suggested for skipping `000108` in the batch run and processing it separately (probably on a different CRON cycle altogether).
+
+For example, to map `zarr` objects from Dandisets except `000108`:
+
+```bash
+map_binned_s3_logs_to_dandisets \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
+  --mapped_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
+  --object_type zarr
+  --excluded_dandisets 000108
+```
+
+Then separately:
+
+```bash
+map_binned_s3_logs_to_dandisets \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
+  --mapped_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
+  --object_type zarr
+  --included_dandisets 000108
+```
 
 
 
