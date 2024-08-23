@@ -11,46 +11,41 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
 
     file_parent = pathlib.Path(__file__).parent
     examples_folder_path = file_parent / "examples" / "mapped_to_dandisets_example_0"
-    reduced_s3_logs_folder_path = examples_folder_path / "binned_logs"
-    dandiset_logs_folder_path = tmpdir
+    example_binned_s3_logs_folder_path = examples_folder_path / "binned_logs"
 
-    dandi_s3_log_parser.map_binned_s3_logs_to_dandisets(
-        binned_s3_logs_folder_path=reduced_s3_logs_folder_path,
-        dandiset_logs_folder_path=dandiset_logs_folder_path,
-    )
+    test_mapped_s3_logs_folder_path = tmpdir
 
     expected_output_folder_path = examples_folder_path / "expected_output"
 
-    # Ensure to extra folders were created
-    test_dandiset_id_folder_paths = [
-        dandiset_id_folder_path.stem for dandiset_id_folder_path in dandiset_logs_folder_path.iterdir()
-    ]
-    expected_dandiset_id_folder_paths = [
-        dandiset_id_folder_path.stem for dandiset_id_folder_path in expected_output_folder_path.iterdir()
-    ]
-    assert set(test_dandiset_id_folder_paths) == set(expected_dandiset_id_folder_paths)
+    dandi_s3_log_parser.map_binned_s3_logs_to_dandisets(
+        binned_s3_logs_folder_path=example_binned_s3_logs_folder_path,
+        mapped_s3_logs_folder_path=test_mapped_s3_logs_folder_path,
+        object_type="blobs",
+    )
+    dandi_s3_log_parser.map_binned_s3_logs_to_dandisets(
+        binned_s3_logs_folder_path=example_binned_s3_logs_folder_path,
+        mapped_s3_logs_folder_path=test_mapped_s3_logs_folder_path,
+        object_type="zarr",
+    )
 
-    test_dandiset_version_id_file_paths = {
-        f"{version_id_file_path.parent.name}/{version_id_file_path.name}": version_id_file_path
-        for dandiset_id_folder_path in dandiset_logs_folder_path.iterdir()
-        for version_id_file_path in dandiset_id_folder_path.iterdir()
+    test_file_paths = {
+        path.relative_to(test_mapped_s3_logs_folder_path): path
+        for path in test_mapped_s3_logs_folder_path.rglob("*.tsv")
     }
-    expected_dandiset_version_id_file_paths = {
-        f"{version_id_file_path.parent.name}/{version_id_file_path.name}": version_id_file_path
-        for dandiset_id_folder_path in expected_output_folder_path.iterdir()
-        for version_id_file_path in dandiset_id_folder_path.iterdir()
+    expected_file_paths = {
+        path.relative_to(expected_output_folder_path): path for path in expected_output_folder_path.rglob("*.tsv")
     }
-    assert set(test_dandiset_version_id_file_paths.keys()) == set(expected_dandiset_version_id_file_paths.keys())
+    assert set(test_file_paths.keys()) == set(expected_file_paths.keys())
 
-    for expected_version_id_file_path in expected_dandiset_version_id_file_paths.values():
+    for expected_file_path in expected_file_paths.values():
+        relative_file_path = expected_file_path.relative_to(expected_output_folder_path)
+        test_file_path = test_mapped_s3_logs_folder_path / relative_file_path
+
         # Pandas assertion makes no reference to the file being tested when it fails
-        print(expected_version_id_file_path)
+        print(f"{test_file_path=}")
+        print(f"{expected_file_path=}")
 
-        test_version_id_file_path = (
-            dandiset_logs_folder_path / expected_version_id_file_path.parent.name / expected_version_id_file_path.name
-        )
-
-        test_mapped_log = pandas.read_table(filepath_or_buffer=test_version_id_file_path, index_col=0)
-        expected_mapped_log = pandas.read_table(filepath_or_buffer=expected_version_id_file_path, index_col=0)
+        test_mapped_log = pandas.read_table(filepath_or_buffer=test_file_path, index_col=0)
+        expected_mapped_log = pandas.read_table(filepath_or_buffer=expected_file_path, index_col=0)
 
         pandas.testing.assert_frame_equal(left=test_mapped_log, right=expected_mapped_log)

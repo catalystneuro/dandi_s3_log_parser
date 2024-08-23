@@ -25,6 +25,7 @@ def test_bin_reduced_s3_logs_by_object_key_example_0(tmpdir: py.path.local) -> N
     )
 
     for expected_binned_s3_log_file_path in expected_binned_s3_log_file_paths:
+        # Pandas assertion makes no reference to the file being tested when it fails
         print(f"Testing binning of {expected_binned_s3_log_file_path}...")
 
         relative_file_path = expected_binned_s3_log_file_path.relative_to(expected_binned_s3_logs_folder_path)

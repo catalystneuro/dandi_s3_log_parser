@@ -101,7 +101,7 @@ def bin_all_reduced_s3_logs_by_object_key(
         ):
             object_key_as_path = pathlib.Path(object_key)
             binned_s3_log_file_path = (
-                binned_s3_logs_folder_path / object_key_as_path.parent / f"{object_key_as_path.stem}.tsv"
+                binned_s3_logs_folder_path / object_key_as_path.parent / f"{object_key_as_path.name}.tsv"
             )
             binned_s3_log_file_path.parent.mkdir(exist_ok=True, parents=True)
 
