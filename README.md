@@ -167,6 +167,8 @@ map_binned_s3_logs_to_dandisets \
   --excluded_dandisets 000108
 ```
 
+In the summer of 2024, this took less than an hour to run.
+
 Then separately:
 
 ```bash
@@ -176,6 +178,8 @@ map_binned_s3_logs_to_dandisets \
   --object_type zarr
   --included_dandisets 000108
 ```
+
+In the summer of 2024, this took less than an hour to run.
 
 
 
