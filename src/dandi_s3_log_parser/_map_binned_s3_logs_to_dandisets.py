@@ -85,9 +85,9 @@ def map_binned_s3_logs_to_dandisets(
         mininterval=5.0,
         smoothing=0,
     ):
-        _map_binneded_logs_to_dandiset(
+        _map_binned_logs_to_dandiset(
             dandiset=dandiset,
-            binneded_s3_logs_folder_path=binned_s3_logs_folder_path,
+            binned_s3_logs_folder_path=binned_s3_logs_folder_path,
             dandiset_logs_folder_path=mapped_s3_logs_folder_path,
             object_type=object_type,
             client=client,
@@ -99,9 +99,9 @@ def map_binned_s3_logs_to_dandisets(
         _save_ip_hash_cache(name="services", ip_cache=ip_hash_not_in_services)
 
 
-def _map_binneded_logs_to_dandiset(
+def _map_binned_logs_to_dandiset(
     dandiset: dandi.dandiapi.RemoteDandiset,
-    binneded_s3_logs_folder_path: pathlib.Path,
+    binned_s3_logs_folder_path: pathlib.Path,
     dandiset_logs_folder_path: pathlib.Path,
     object_type: Literal["blobs", "zarr"],
     client: dandi.dandiapi.DandiAPIClient,
@@ -153,12 +153,15 @@ def _map_binneded_logs_to_dandiset(
 
             if is_asset_zarr:
                 blob_id = asset.zarr
-                binned_s3_log_file_path = binneded_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
+                binned_s3_log_file_path = binned_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
             else:
                 blob_id = asset.blob
                 binned_s3_log_file_path = (
-                    binneded_s3_logs_folder_path / "blobs" / blob_id[:3] / blob_id[3:6] / f"{blob_id}.tsv"
+                    binned_s3_logs_folder_path / "blobs" / blob_id[:3] / blob_id[3:6] / f"{blob_id}.tsv"
                 )
+
+            # TODO: Could add a step here to track which object IDs have been processed, and if encountered again
+            # Just copy the file over instead of reprocessing
 
             if not binned_s3_log_file_path.exists():
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset
