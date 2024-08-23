@@ -56,10 +56,12 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
     assert set(test_file_paths.keys()) == set(expected_file_paths.keys())
 
     for expected_file_path in expected_file_paths.values():
-        # Pandas assertion makes no reference to the file being tested when it fails
-        print(expected_file_path)
+        relative_file_path = expected_file_path.relative_to(expected_output_folder_path)
+        test_file_path = test_dandiset_logs_folder_path / relative_file_path
 
-        test_file_path = test_dandiset_logs_folder_path / expected_file_path.parent.name / expected_file_path.name
+        # Pandas assertion makes no reference to the file being tested when it fails
+        print(f"{test_file_path=}")
+        print(f"{expected_file_path=}")
 
         test_mapped_log = pandas.read_table(filepath_or_buffer=test_file_path, index_col=0)
         expected_mapped_log = pandas.read_table(filepath_or_buffer=expected_file_path, index_col=0)
