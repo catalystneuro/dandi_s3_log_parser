@@ -14,7 +14,7 @@ from ._ip_utils import _load_ip_hash_cache, _save_ip_hash_cache, get_region_from
 @validate_call
 def map_binned_s3_logs_to_dandisets(
     binned_s3_logs_folder_path: DirectoryPath,
-    dandiset_logs_folder_path: DirectoryPath,
+    mapped_s3_logs_folder_path: DirectoryPath,
     object_type: Literal["blobs", "zarr"],
     dandiset_limit: int | None = None,
 ) -> None:
@@ -29,7 +29,7 @@ def map_binned_s3_logs_to_dandisets(
     ----------
     binned_s3_logs_folder_path : DirectoryPath
         The path to the folder containing the reduced S3 log files.
-    dandiset_logs_folder_path : DirectoryPath
+    mapped_s3_logs_folder_path : DirectoryPath
         The path to the folder where the mapped logs will be saved.
     object_type : one of "blobs" or "zarr"
         The type of objects to map the logs to, as determined by the parents of the object keys.
@@ -67,8 +67,8 @@ def map_binned_s3_logs_to_dandisets(
     ):
         _map_binneded_logs_to_dandiset(
             dandiset=dandiset,
-            reduced_s3_logs_folder_path=binned_s3_logs_folder_path,
-            dandiset_logs_folder_path=dandiset_logs_folder_path,
+            binneded_s3_logs_folder_path=binned_s3_logs_folder_path,
+            dandiset_logs_folder_path=mapped_s3_logs_folder_path,
             object_type=object_type,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
@@ -81,7 +81,7 @@ def map_binned_s3_logs_to_dandisets(
 
 def _map_binneded_logs_to_dandiset(
     dandiset: dandi.dandiapi.RemoteDandiset,
-    reduced_s3_logs_folder_path: pathlib.Path,
+    binneded_s3_logs_folder_path: pathlib.Path,
     dandiset_logs_folder_path: pathlib.Path,
     object_type: Literal["blobs", "zarr"],
     client: dandi.dandiapi.DandiAPIClient,
@@ -111,11 +111,11 @@ def _map_binneded_logs_to_dandiset(
 
             if is_asset_zarr:
                 blob_id = asset.zarr
-                reduced_s3_log_file_path = reduced_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
+                reduced_s3_log_file_path = binneded_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
             else:
                 blob_id = asset.blob
                 reduced_s3_log_file_path = (
-                    reduced_s3_logs_folder_path / "blobs" / blob_id[:3] / blob_id[3:6] / f"{blob_id}.tsv"
+                    binneded_s3_logs_folder_path / "blobs" / blob_id[:3] / blob_id[3:6] / f"{blob_id}.tsv"
                 )
 
             if not reduced_s3_log_file_path.exists():

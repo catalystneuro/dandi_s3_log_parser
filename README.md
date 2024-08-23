@@ -129,16 +129,16 @@ bin_all_reduced_s3_logs_by_object_key \
   --file_limit 20
 ```
 
-In the summer of 2024, this process took less than 5 hours to bin all 170 GB of reduced log data.
+In the summer of 2024, this process took less than 5 hours to bin all 170 GB of reduced logs into the 80 GB of data per object key.
 
 ### Mapping
 
-The next step, which should also be updated regularly (daily-weekly), is to iterate through all current versions of all Dandisets, mapping the reduced logs to their assets.
+The next step, which is also the step to re-run and release regularly, is to iterate through all current versions of all Dandisets, mapping the binned logs to their corresponding file paths as seen on the archive.
 
 ```bash
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path < binned S3 logs folder path > \
-  --dandiset_logs_folder_path < mapped Dandiset logs folder > \
+  --mapped_s3_logs_folder_path < mapped Dandiset logs folder > \
   --object_type < blobs or zarr >
 ```
 
@@ -147,11 +147,13 @@ For example, on Drogon:
 ```bash
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
-  --dandiset_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
+  --mapped_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
   --object_type blobs
 ```
 
-In the summer of 2024, this process took less than ?? hours to run without any activate caches and in the current design should be run fresh regularly to keep the logs up to date. The caches that accumulate over time should help speed up the process over repeated calls.
+In the summer of 2024, this `blobs` process took less than 12 hours to run with one worker (could easily be parallelized in the future) without any activate caches. The caches that accumulate over time help speed up the process over repeated calls; a fresh run with caches only took less than ?? hours.
+
+`zarr` is likely to take longer, but the general process is the same.
 
 
 
