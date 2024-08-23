@@ -91,14 +91,30 @@ def _map_binneded_logs_to_dandiset(
     dandiset_id = dandiset.identifier
     dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
 
-    for version in dandiset.get_versions():
+    dandiset_versions = list(dandiset.get_versions())
+    for version in tqdm.tqdm(
+        iterable=dandiset_versions,
+        total=len(dandiset_versions),
+        desc=f"Mapping Dandiset {dandiset_id} versions...",
+        position=1,
+        mininterval=3.0,
+        smoothing=0,
+    ):
         version_id = version.identifier
         dandiset_version_log_folder_path = dandiset_log_folder_path / version_id
 
         dandiset_version = client.get_dandiset(dandiset_id=dandiset_id, version_id=version_id)
 
         all_activity_for_version = []
-        for asset in dandiset_version.get_assets():
+        dandiset_version_assets = dandiset_version.get_assets()
+        for asset in tqdm.tqdm(
+            iterable=dandiset_version_assets,
+            total=len(dandiset_version_assets),
+            desc="Mapping assets...",
+            position=2,
+            mininterval=3.0,
+            smoothing=0,
+        ):
             asset_as_path = pathlib.Path(asset.path)
             asset_suffixes = asset_as_path.suffixes
             dandi_filename = asset_as_path.name.removesuffix("".join(asset_suffixes))
@@ -111,17 +127,17 @@ def _map_binneded_logs_to_dandiset(
 
             if is_asset_zarr:
                 blob_id = asset.zarr
-                reduced_s3_log_file_path = binneded_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
+                binned_s3_log_file_path = binneded_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
             else:
                 blob_id = asset.blob
-                reduced_s3_log_file_path = (
+                binned_s3_log_file_path = (
                     binneded_s3_logs_folder_path / "blobs" / blob_id[:3] / blob_id[3:6] / f"{blob_id}.tsv"
                 )
 
-            if not reduced_s3_log_file_path.exists():
+            if not binned_s3_log_file_path.exists():
                 continue  # No reduced logs found (possible asset was never accessed); skip to next asset
 
-            reduced_s3_log_binned_by_blob_id = pandas.read_table(filepath_or_buffer=reduced_s3_log_file_path, header=0)
+            reduced_s3_log_binned_by_blob_id = pandas.read_table(filepath_or_buffer=binned_s3_log_file_path, header=0)
 
             reduced_s3_log_binned_by_blob_id["region"] = [
                 get_region_from_ip_address(
@@ -144,21 +160,27 @@ def _map_binneded_logs_to_dandiset(
                 path_or_buf=version_asset_file_path, mode="w", sep="\t", header=True, index=True
             )
 
-            all_activity_for_version.append(reordered_reduced_s3_log)
+            reordered_reduced_s3_log["date"] = [entry[:10] for entry in reordered_reduced_s3_log["timestamp"]]
+
+            reordered_reduced_s3_log_aggregated = reordered_reduced_s3_log.groupby("date", as_index=False)[
+                "bytes_sent"
+            ].agg([list, "sum"])
+            reordered_reduced_s3_log_aggregated.rename(columns={"sum": "bytes_sent"}, inplace=True)
+
+            reordered_reduced_s3_log_binned_per_day = reordered_reduced_s3_log_aggregated.reindex(
+                columns=("date", "bytes_sent")
+            )
+            reordered_reduced_s3_log_binned_per_day.sort_values(by="date", key=natsort.natsort_keygen(), inplace=True)
+
+            all_activity_for_version.append(reordered_reduced_s3_log_binned_per_day)
 
         if len(all_activity_for_version) == 0:
             continue  # No reduced logs found (possible dandiset version was never accessed); skip to next version
 
-        mapped_log = pandas.concat(objs=all_activity_for_version, ignore_index=True)
-        mapped_log["date"] = [entry[:10] for entry in mapped_log["timestamp"]]
-
-        mapped_log_aggregated = mapped_log.groupby("date", as_index=False)["bytes_sent"].agg([list, "sum"])
-        mapped_log_aggregated.rename(columns={"sum": "bytes_sent"}, inplace=True)
-
-        mapped_log_binned_per_day = mapped_log_aggregated.reindex(columns=("date", "bytes_sent"))
-        mapped_log_binned_per_day.sort_values(by="date", key=natsort.natsort_keygen(), inplace=True)
+        summary_logs = pandas.concat(objs=all_activity_for_version, ignore_index=True)
+        summary_logs.sort_values(by="date", key=natsort.natsort_keygen(), inplace=True)
 
         summary_file_path = dandiset_version_log_folder_path / "summary.tsv"
-        mapped_log_binned_per_day.to_csv(path_or_buf=summary_file_path, mode="w", sep="\t", header=True)
+        summary_logs.to_csv(path_or_buf=summary_file_path, mode="w", sep="\t", header=True)
 
     return None
