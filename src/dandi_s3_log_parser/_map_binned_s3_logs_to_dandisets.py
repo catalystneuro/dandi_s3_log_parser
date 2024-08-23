@@ -97,7 +97,7 @@ def _map_binneded_logs_to_dandiset(
         total=len(dandiset_versions),
         desc=f"Mapping Dandiset {dandiset_id} versions...",
         position=1,
-        mininterval=3.0,
+        mininterval=5.0,
         smoothing=0,
     ):
         version_id = version.identifier
@@ -112,7 +112,7 @@ def _map_binneded_logs_to_dandiset(
             total=len(dandiset_version_assets),
             desc="Mapping assets...",
             position=2,
-            mininterval=3.0,
+            mininterval=5.0,
             smoothing=0,
         ):
             asset_as_path = pathlib.Path(asset.path)
