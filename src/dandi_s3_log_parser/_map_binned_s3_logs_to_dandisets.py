@@ -101,7 +101,7 @@ def _map_binneded_logs_to_dandiset(
         for asset in dandiset_version.get_assets():
             asset_as_path = pathlib.Path(asset.path)
             asset_suffixes = asset_as_path.suffixes
-            dandi_filename = asset_as_path.name.rstrip("".join(asset_suffixes))
+            dandi_filename = asset_as_path.name.removesuffix("".join(asset_suffixes))
 
             is_asset_zarr = ".zarr" in asset_suffixes
             if is_asset_zarr and object_type == "blobs":
