@@ -62,6 +62,7 @@ def map_binned_s3_logs_to_dandisets(
         total=len(current_dandisets),
         desc="Mapping reduced logs to Dandisets...",
         position=0,
+        leave=True,
         mininterval=5.0,
         smoothing=0,
     ):
@@ -97,6 +98,7 @@ def _map_binneded_logs_to_dandiset(
         total=len(dandiset_versions),
         desc=f"Mapping Dandiset {dandiset_id} versions...",
         position=1,
+        leave=False,
         mininterval=5.0,
         smoothing=0,
     ):
@@ -112,6 +114,7 @@ def _map_binneded_logs_to_dandiset(
             total=len(dandiset_version_assets),
             desc="Mapping assets...",
             position=2,
+            leave=False,
             mininterval=5.0,
             smoothing=0,
         ):
