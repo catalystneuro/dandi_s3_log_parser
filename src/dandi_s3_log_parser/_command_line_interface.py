@@ -169,8 +169,8 @@ def _map_binned_s3_logs_to_dandisets_cli(
     included_dandisets: str | None,
     dandiset_limit: int | None,
 ) -> None:
-    split_excluded_dandisets = excluded_dandisets.split(",") if excluded_dandisets is not None else []
-    split_included_dandisets = included_dandisets.split(",") if included_dandisets is not None else []
+    split_excluded_dandisets = excluded_dandisets.split(",") if excluded_dandisets is not None else None
+    split_included_dandisets = included_dandisets.split(",") if included_dandisets is not None else None
 
     map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=binned_s3_logs_folder_path,
