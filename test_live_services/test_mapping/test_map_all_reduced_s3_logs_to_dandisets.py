@@ -30,10 +30,10 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
 
     # Ensure to extra folders were created
     test_dandiset_id_folder_paths = [
-        dandiset_id_folder_path.stem for dandiset_id_folder_path in test_dandiset_logs_folder_path.iterdir()
+        dandiset_id_folder_path.name for dandiset_id_folder_path in test_dandiset_logs_folder_path.iterdir()
     ]
     expected_dandiset_id_folder_paths = [
-        dandiset_id_folder_path.stem for dandiset_id_folder_path in expected_output_folder_path.iterdir()
+        dandiset_id_folder_path.name for dandiset_id_folder_path in expected_output_folder_path.iterdir()
     ]
     assert set(test_dandiset_id_folder_paths) == set(expected_dandiset_id_folder_paths)
 
