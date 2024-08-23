@@ -106,7 +106,7 @@ def _map_binneded_logs_to_dandiset(
         dandiset_version = client.get_dandiset(dandiset_id=dandiset_id, version_id=version_id)
 
         all_activity_for_version = []
-        dandiset_version_assets = dandiset_version.get_assets()
+        dandiset_version_assets = list(dandiset_version.get_assets())
         for asset in tqdm.tqdm(
             iterable=dandiset_version_assets,
             total=len(dandiset_version_assets),
