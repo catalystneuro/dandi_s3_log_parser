@@ -26,7 +26,7 @@ A few summary facts as of 2024:
 - A single line of a raw S3 log file can be between 400-1000+ bytes.
 - Some of the busiest daily logs on the archive can have around 5,014,386 lines.
 - There are more than 6 TB of log files collected in total.
-- This parser reduces that total to around 20 GB of final essential information.
+- This parser reduces that total to less than 25 GB of final essential information on NWB assets (Zarr size TBD).
 
 
 
@@ -133,7 +133,7 @@ In the summer of 2024, this process took less than 5 hours to bin all 170 GB of 
 
 ### Mapping
 
-The next step, which is also the step to re-run and release regularly, is to iterate through all current versions of all Dandisets, mapping the binned logs to their corresponding file paths as seen on the archive.
+To map:
 
 ```bash
 map_binned_s3_logs_to_dandisets \
