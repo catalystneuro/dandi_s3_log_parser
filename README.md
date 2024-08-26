@@ -139,7 +139,8 @@ To map:
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path < binned S3 logs folder path > \
   --mapped_s3_logs_folder_path < mapped Dandiset logs folder > \
-  --object_type < blobs or zarr >
+  --excluded_dandisets < comma-separated list of six-digit IDs to exclude > \
+  --restrict_to_dandisets < comma-separated list of six-digit IDs to restrict mapping to >
 ```
 
 For example, on Drogon:
@@ -148,12 +149,25 @@ For example, on Drogon:
 map_binned_s3_logs_to_dandisets \
   --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
   --mapped_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
-  --object_type blobs
+  --excluded_dandisets 000108
 ```
 
-In the summer of 2024, this `blobs` process took less than 6 hours to run (with caches; 8 hours without caches) with one worker. The process could easily be parallelized if requested.
+In the summer of 2024, this blobs process took less than 8 hours to complete (with caches; 10 hours without caches) with one worker.
 
-Mapping the `zarr` objects takes much longer (more than 12 hours, and is more memory intensive), but the general process is the same.
+Some Dandisets may take disproportionately longer than others to process. For this reason, the command also accepts `--excluded_dandisets` and `--restrict_to_dandisets`.
+
+This is strongly suggested for skipping `000108` in the main run and processing it separately (possibly on a different CRON cycle altogether).
+
+```bash
+map_binned_s3_logs_to_dandisets \
+  --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
+  --mapped_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-mapped \
+  --restrict_to_dandisets 000108
+```
+
+In the summer of 2024, this took ?? hours to complete.
+
+The mapping process can theoretically be designed to work in parallel (and thus much faster), but this would take some effort to design. If interested, please open an issue to request this feature.
 
 
 

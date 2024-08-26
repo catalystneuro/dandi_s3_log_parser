@@ -20,12 +20,6 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
     dandi_s3_log_parser.map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=example_binned_s3_logs_folder_path,
         mapped_s3_logs_folder_path=test_mapped_s3_logs_folder_path,
-        object_type="blobs",
-    )
-    dandi_s3_log_parser.map_binned_s3_logs_to_dandisets(
-        binned_s3_logs_folder_path=example_binned_s3_logs_folder_path,
-        mapped_s3_logs_folder_path=test_mapped_s3_logs_folder_path,
-        object_type="zarr",
     )
 
     test_file_paths = {

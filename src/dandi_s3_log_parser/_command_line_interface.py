@@ -2,7 +2,6 @@
 
 import collections
 import pathlib
-from typing import Literal
 
 import click
 
@@ -135,14 +134,22 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
     type=click.Path(writable=False),
 )
 @click.option(
-    "--object_type",
-    help="The type of objects to map the logs to, as determined by the parents of the object keys.",
-    required=True,
-    type=click.Choice(["blobs", "zarr"]),
+    "--excluded_dandisets",
+    help="A comma-separated list of Dandiset IDs to exclude from processing.",
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
+    "--restrict_to_dandisets",
+    help="A comma-separated list of Dandiset IDs to exclusively process.",
+    required=False,
+    type=str,
+    default=None,
 )
 @click.option(
     "--dandiset_limit",
-    help="The maximum number of Dandisets to process per call.",
+    help="The maximum number of Dandisets to process per call. Useful for quick testing.",
     required=False,
     type=int,
     default=None,
@@ -150,13 +157,18 @@ def _bin_all_reduced_s3_logs_by_object_key_cli(
 def _map_binned_s3_logs_to_dandisets_cli(
     binned_s3_logs_folder_path: pathlib.Path,
     mapped_s3_logs_folder_path: pathlib.Path,
-    object_type: Literal["blobs", "zarr"],
+    excluded_dandisets: str | None,
+    restrict_to_dandisets: str | None,
     dandiset_limit: int | None,
 ) -> None:
+    split_excluded_dandisets = excluded_dandisets.split(",") if excluded_dandisets is not None else None
+    split_restrict_to_dandisets = restrict_to_dandisets.split(",") if restrict_to_dandisets is not None else None
+
     map_binned_s3_logs_to_dandisets(
         binned_s3_logs_folder_path=binned_s3_logs_folder_path,
         mapped_s3_logs_folder_path=mapped_s3_logs_folder_path,
-        object_type=object_type,
+        excluded_dandisets=split_excluded_dandisets,
+        restrict_to_dandisets=split_restrict_to_dandisets,
         dandiset_limit=dandiset_limit,
     )
 
