@@ -91,8 +91,8 @@ def map_binned_s3_logs_to_dandisets(
             ip_hash_not_in_services=ip_hash_not_in_services,
         )
 
-    _save_ip_hash_cache(ip_hash_to_region, name="region")
-    _save_ip_hash_cache(ip_hash_not_in_services, name="services")
+    _save_ip_hash_cache(name="region", ip_cache=ip_hash_to_region)
+    _save_ip_hash_cache(name="services", ip_cache=ip_hash_not_in_services)
 
     return None
 
