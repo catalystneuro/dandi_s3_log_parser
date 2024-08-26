@@ -152,7 +152,7 @@ map_binned_s3_logs_to_dandisets \
   --excluded_dandisets 000108
 ```
 
-In the summer of 2024, this blobs process took less than 6 hours to complete (with caches; 8 hours without caches) with one worker.
+In the summer of 2024, this blobs process took less than 8 hours to complete (with caches; 10 hours without caches) with one worker.
 
 Some Dandisets may take disproportionately longer than others to process. For this reason, the command also accepts `--excluded_dandisets` and `--restrict_to_dandisets`.
 
@@ -166,6 +166,8 @@ map_binned_s3_logs_to_dandisets \
 ```
 
 In the summer of 2024, this took ?? hours to complete.
+
+The mapping process can theoretically be designed to work in parallel (and thus much faster), but this would take some effort to design. If interested, please open an issue to request this feature.
 
 
 
