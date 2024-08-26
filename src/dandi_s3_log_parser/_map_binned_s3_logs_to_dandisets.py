@@ -1,6 +1,5 @@
 import os
 import pathlib
-from typing import Literal
 
 import dandi.dandiapi
 import natsort
@@ -15,7 +14,6 @@ from ._ip_utils import _load_ip_hash_cache, _save_ip_hash_cache, get_region_from
 def map_binned_s3_logs_to_dandisets(
     binned_s3_logs_folder_path: DirectoryPath,
     mapped_s3_logs_folder_path: DirectoryPath,
-    object_type: Literal["blobs", "zarr"],
     excluded_dandisets: list[str] | None = None,
     restrict_to_dandisets: list[str] | None = None,
     dandiset_limit: int | None = None,
@@ -33,14 +31,13 @@ def map_binned_s3_logs_to_dandisets(
         The path to the folder containing the reduced S3 log files.
     mapped_s3_logs_folder_path : DirectoryPath
         The path to the folder where the mapped logs will be saved.
-    object_type : one of "blobs" or "zarr"
-        The type of objects to map the logs to, as determined by the parents of the object keys.
     excluded_dandisets : list of str, optional
         A list of Dandiset IDs to exclude from processing.
     restrict_to_dandisets : list of str, optional
         A list of Dandiset IDs to exclusively process.
     dandiset_limit : int, optional
         The maximum number of Dandisets to process per call.
+        Useful for quick testing.
     """
     if "IPINFO_CREDENTIALS" not in os.environ:
         message = "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
@@ -89,7 +86,6 @@ def map_binned_s3_logs_to_dandisets(
             dandiset=dandiset,
             binned_s3_logs_folder_path=binned_s3_logs_folder_path,
             dandiset_logs_folder_path=mapped_s3_logs_folder_path,
-            object_type=object_type,
             client=client,
             ip_hash_to_region=ip_hash_to_region,
             ip_hash_not_in_services=ip_hash_not_in_services,
@@ -105,7 +101,6 @@ def _map_binned_logs_to_dandiset(
     dandiset: dandi.dandiapi.RemoteDandiset,
     binned_s3_logs_folder_path: pathlib.Path,
     dandiset_logs_folder_path: pathlib.Path,
-    object_type: Literal["blobs", "zarr"],
     client: dandi.dandiapi.DandiAPIClient,
     ip_hash_to_region: dict[str, str],
     ip_hash_not_in_services: dict[str, bool],
@@ -148,11 +143,6 @@ def _map_binned_logs_to_dandiset(
             dandi_filename = asset_as_path.name.replace(".", "_")
 
             is_asset_zarr = ".zarr" in asset_suffixes
-            if is_asset_zarr and object_type == "blobs":
-                continue
-            if not is_asset_zarr and object_type == "zarr":
-                continue
-
             if is_asset_zarr:
                 blob_id = asset.zarr
                 binned_s3_log_file_path = binned_s3_logs_folder_path / "zarr" / f"{blob_id}.tsv"
