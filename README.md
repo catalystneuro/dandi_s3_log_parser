@@ -165,7 +165,7 @@ map_binned_s3_logs_to_dandisets \
   --restrict_to_dandisets 000108
 ```
 
-In the summer of 2024, this took ?? hours to complete.
+In the summer of 2024, this took less than 15 hours to complete.
 
 The mapping process can theoretically be designed to work in parallel (and thus much faster), but this would take some effort to design. If interested, please open an issue to request this feature.
 
