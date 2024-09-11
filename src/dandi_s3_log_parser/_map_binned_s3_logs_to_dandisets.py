@@ -39,17 +39,17 @@ def map_binned_s3_logs_to_dandisets(
         The maximum number of Dandisets to process per call.
         Useful for quick testing.
     """
-    if "IPINFO_CREDENTIALS" not in os.environ:
+    if "IPINFO_CREDENTIALS" not in os.environ:  # pragma: no cover
         message = "The environment variable 'IPINFO_CREDENTIALS' must be set to import `dandi_s3_log_parser`!"
-        raise ValueError(message)  # pragma: no cover
+        raise ValueError(message)
 
-    if "IP_HASH_SALT" not in os.environ:
+    if "IP_HASH_SALT" not in os.environ:  # pragma: no cover
         message = (
             "The environment variable 'IP_HASH_SALT' must be set to import `dandi_s3_log_parser`! "
             "To retrieve the value, set a temporary value to this environment variable "
             "and then use the `get_hash_salt` helper function and set it to the correct value."
         )
-        raise ValueError(message)  # pragma: no cover
+        raise ValueError(message)
 
     if excluded_dandisets is not None and restrict_to_dandisets is not None:
         message = "Only one of `exclude_dandisets` or `restrict_to_dandisets` can be passed, not both!"
@@ -202,6 +202,6 @@ def _map_binned_logs_to_dandiset(
         summary_logs.sort_values(by="date", key=natsort.natsort_keygen(), inplace=True)
 
         summary_file_path = dandiset_version_log_folder_path / "summary.tsv"
-        summary_logs.to_csv(path_or_buf=summary_file_path, mode="w", sep="\t", header=True)
+        summary_logs.to_csv(path_or_buf=summary_file_path, mode="w", sep="\t", header=True, index=False)
 
     return None
