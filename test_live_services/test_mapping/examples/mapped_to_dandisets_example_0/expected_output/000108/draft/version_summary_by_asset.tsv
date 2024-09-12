@@ -1,3 +1,2 @@
-asset	bytes_sent
-sub-YutaMouse20/sub-YutaMouse20_ses-YutaMouse20-140327_behavior+ecephys.nwb	1024
-sub-YutaMouse37/sub-YutaMouse37_ses-YutaMouse37-150610_behavior+ecephys.nwb	1234
+asset_path	bytes_sent
+sub-MITU01/ses-20220317h10m43s39/micr/sub-MITU01_ses-20220317h10m43s39_sample-21_stain-LEC_run-1_chunk-1_SPIM.ome.zarr	1526223

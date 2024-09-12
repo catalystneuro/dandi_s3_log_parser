@@ -113,7 +113,7 @@ def _map_binned_logs_to_dandiset(
 
     all_activity_across_versions_per_blob_id_by_day = dict()
     blob_id_to_asset_path = dict()
-    all_activity_across_versions_by_blob_id = dict()
+    total_bytes_across_versions_by_blob_id = dict()
     dandiset_versions = list(dandiset.get_versions())
     for version in tqdm.tqdm(
         iterable=dandiset_versions,
@@ -130,8 +130,8 @@ def _map_binned_logs_to_dandiset(
 
         dandiset_version = client.get_dandiset(dandiset_id=dandiset_id, version_id=version_id)
 
-        all_activity_for_version_by_day = []
-        all_activity_for_version_by_asset_path = dict()
+        reduced_s3_logs_per_day = []
+        total_bytes_per_asset_path = dict()
         dandiset_version_assets = list(dandiset_version.get_assets())
         for asset in tqdm.tqdm(
             iterable=dandiset_version_assets,
@@ -192,55 +192,45 @@ def _map_binned_logs_to_dandiset(
 
             reordered_reduced_s3_log["date"] = [entry[:10] for entry in reordered_reduced_s3_log["timestamp"]]
             reordered_reduced_s3_log_binned_per_day = reordered_reduced_s3_log.reindex(columns=("date", "bytes_sent"))
-            all_activity_for_version_by_day.append(reordered_reduced_s3_log_binned_per_day)
+            reduced_s3_logs_per_day.append(reordered_reduced_s3_log_binned_per_day)
             all_activity_across_versions_per_blob_id_by_day[blob_id] = reordered_reduced_s3_log_binned_per_day
 
             total_bytes = sum(reduced_s3_log_binned_by_blob_id["bytes_sent"])
-            all_activity_for_version_by_asset_path[asset.path] = total_bytes
+            total_bytes_per_asset_path[asset.path] = total_bytes
 
             blob_id_to_asset_path[blob_id] = asset.path
-            all_activity_across_versions_by_blob_id[blob_id] = total_bytes
+            total_bytes_across_versions_by_blob_id[blob_id] = total_bytes
 
-        if len(all_activity_for_version_by_day) == 0:
+        if len(reduced_s3_logs_per_day) == 0:
             continue  # No activity found (possible dandiset version was never accessed); skip to next version
 
-        aggregated_activity_for_version_by_day = _aggregate_activity_by_day(
-            reduced_s3_logs_per_day=all_activity_for_version_by_day
-        )
-        aggregated_activity_for_version_by_asset = _aggregate_activity_by_asset(
-            total_bytes_per_asset_path=all_activity_for_version_by_asset_path
+        version_summary_by_day_file_path = dandiset_version_log_folder_path / "version_summary_by_day.tsv"
+        _write_aggregated_activity_by_day(
+            reduced_s3_logs_per_day=reduced_s3_logs_per_day, file_path=version_summary_by_day_file_path
         )
 
-        version_summary_by_day_file_path = dandiset_version_log_folder_path / "version_summary_by_day.tsv"
         version_summary_by_asset_file_path = dandiset_version_log_folder_path / "version_summary_by_asset.tsv"
-        aggregated_activity_for_version_by_day.to_csv(
-            path_or_buf=version_summary_by_day_file_path, mode="w", sep="\t", header=True, index=False
-        )
-        aggregated_activity_for_version_by_asset.to_csv(
-            path_or_buf=version_summary_by_asset_file_path, mode="w", sep="\t", header=True, index=False
+        _write_aggregated_activity_by_asset(
+            total_bytes_per_asset_path=total_bytes_per_asset_path, file_path=version_summary_by_asset_file_path
         )
 
     if len(all_activity_across_versions_per_blob_id_by_day) == 0:
         return None  # No activity found (possible dandiset was never accessed); skip to next version
 
-    all_activity_across_versions_by_asset = collections.defaultdict(int)
+    # Single path across versions could have been replaced at various points by a new blob
+    total_bytes_across_versions_by_asset = collections.defaultdict(int)
     for blob_id, asset_path in blob_id_to_asset_path.items():
-        all_activity_across_versions_by_asset[asset_path] += all_activity_across_versions_by_blob_id[blob_id]
-
-    aggregated_activity_for_dandiset_by_day = _aggregate_activity_by_day(
-        reduced_s3_logs_per_day=all_activity_across_versions_per_blob_id_by_day.values()
-    )
-    aggregated_activity_for_dandiset_by_asset = _aggregate_activity_by_asset(
-        total_bytes_per_asset_path=all_activity_across_versions_by_asset
-    )
+        total_bytes_across_versions_by_asset[asset_path] += total_bytes_across_versions_by_blob_id[blob_id]
 
     dandiset_summary_by_day_file_path = dandiset_log_folder_path / "dandiset_summary_by_day.tsv"
-    dandiset_summary_by_asset_file_path = dandiset_log_folder_path / "dandiset_summary_by_asset.tsv"
-    aggregated_activity_for_dandiset_by_day.to_csv(
-        path_or_buf=dandiset_summary_by_day_file_path, mode="w", sep="\t", header=True, index=False
+    _write_aggregated_activity_by_day(
+        reduced_s3_logs_per_day=all_activity_across_versions_per_blob_id_by_day.values(),
+        file_path=dandiset_summary_by_day_file_path,
     )
-    aggregated_activity_for_dandiset_by_asset.to_csv(
-        path_or_buf=dandiset_summary_by_asset_file_path, mode="w", sep="\t", header=True, index=False
+
+    dandiset_summary_by_asset_file_path = dandiset_log_folder_path / "dandiset_summary_by_asset.tsv"
+    _write_aggregated_activity_by_asset(
+        total_bytes_per_asset_path=total_bytes_across_versions_by_asset, file_path=dandiset_summary_by_asset_file_path
     )
 
     return None
@@ -262,7 +252,27 @@ def _aggregate_activity_by_asset(total_bytes_per_asset_path: dict[str, int]) -> 
     aggregated_activity_by_asset = pandas.DataFrame(
         data=[list(total_bytes_per_asset_path.keys()), list(total_bytes_per_asset_path.values())]
     ).T
-    aggregated_activity_by_asset.rename(columns={"0": "asset_path", "1": "bytes_sent"}, inplace=True)
-    aggregated_activity_by_asset.sort_values(by="bytes_sent", inplace=True)
+    aggregated_activity_by_asset.rename(columns={0: "asset_path", 1: "bytes_sent"}, inplace=True)
+    aggregated_activity_by_asset.sort_values(by="bytes_sent", ascending=False, inplace=True)
 
     return aggregated_activity_by_asset
+
+
+def _write_aggregated_activity_by_day(
+    reduced_s3_logs_per_day: Iterable[pandas.DataFrame], file_path: pathlib.Path
+) -> None:
+    aggregated_activity_for_version_by_day = _aggregate_activity_by_day(reduced_s3_logs_per_day=reduced_s3_logs_per_day)
+    aggregated_activity_for_version_by_day.to_csv(path_or_buf=file_path, mode="w", sep="\t", header=True, index=False)
+
+    return None
+
+
+def _write_aggregated_activity_by_asset(total_bytes_per_asset_path: dict[str, int], file_path: pathlib.Path) -> None:
+    aggregated_activity_for_dandiset_by_asset = _aggregate_activity_by_asset(
+        total_bytes_per_asset_path=total_bytes_per_asset_path
+    )
+    aggregated_activity_for_dandiset_by_asset.to_csv(
+        path_or_buf=file_path, mode="w", sep="\t", header=True, index=False
+    )
+
+    return None
