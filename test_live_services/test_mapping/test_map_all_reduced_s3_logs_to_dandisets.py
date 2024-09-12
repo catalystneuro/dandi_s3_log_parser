@@ -35,11 +35,15 @@ def test_map_all_reduced_s3_logs_to_dandisets(tmpdir: py.path.local):
         relative_file_path = expected_file_path.relative_to(expected_output_folder_path)
         test_file_path = test_mapped_s3_logs_folder_path / relative_file_path
 
-        # Pandas assertion makes no reference to the file being tested when it fails
-        print(f"{test_file_path=}")
-        print(f"{expected_file_path=}")
-
         test_mapped_log = pandas.read_table(filepath_or_buffer=test_file_path, index_col=0)
         expected_mapped_log = pandas.read_table(filepath_or_buffer=expected_file_path, index_col=0)
 
-        pandas.testing.assert_frame_equal(left=test_mapped_log, right=expected_mapped_log)
+        # Pandas assertion makes no reference to the case being tested when it fails
+        try:
+            pandas.testing.assert_frame_equal(left=test_mapped_log, right=expected_mapped_log)
+        except AssertionError as exception:
+            message = (
+                f"\n\nTest file path: {test_file_path}\nExpected file path: {expected_file_path}\n\n"
+                f"{str(exception)}\n\n"
+            )
+            raise AssertionError(message)

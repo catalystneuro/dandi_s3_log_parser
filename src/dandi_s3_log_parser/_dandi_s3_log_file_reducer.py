@@ -85,15 +85,15 @@ def reduce_all_dandi_raw_s3_logs(
     fields_to_reduce = ["object_key", "timestamp", "bytes_sent", "ip_address"]
     object_key_parents_to_reduce = ["blobs", "zarr"]
     line_buffer_tqdm_kwargs = dict(position=1, leave=False)
-    # TODO: add better reporting units to all TQDMs (lines / s, files / s, etc.)
     if maximum_number_of_workers == 1:
         for relative_s3_log_file_path in tqdm.tqdm(
             iterable=relative_s3_log_file_paths_to_reduce,
             total=len(relative_s3_log_file_paths_to_reduce),
-            desc="Parsing log files...",
+            desc="Parsing log files",
             position=0,
             leave=True,
             smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
+            unit="file",
         ):
             raw_s3_log_file_path = raw_s3_logs_folder_path / relative_s3_log_file_path
             reduced_s3_log_file_path = (
@@ -144,6 +144,7 @@ def reduce_all_dandi_raw_s3_logs(
                 leave=True,
                 mininterval=3.0,
                 smoothing=0,  # Use true historical average, not moving average since shuffling makes it more uniform
+                unit="file",
             )
             for future in progress_bar_iterable:
                 future.result()  # This is the call that finally triggers the deployment to the workers
@@ -177,7 +178,10 @@ def _multi_worker_reduce_dandi_raw_s3_log(
         object_key_parents_to_reduce = ["blobs", "zarr"]
         object_key_handler = _get_default_dandi_object_key_handler()
         line_buffer_tqdm_kwargs = dict(
-            position=worker_index + 1, leave=False, desc=f"Parsing line buffers on worker {worker_index + 1}..."
+            position=worker_index + 1,
+            leave=False,
+            desc=f"Parsing line buffers on worker {worker_index + 1}...",
+            unit="buffer",
         )
 
         reduce_raw_s3_log(
