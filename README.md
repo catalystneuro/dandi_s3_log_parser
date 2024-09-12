@@ -58,7 +58,7 @@ The process is designed to be easily parallelized and interruptible, meaning tha
 
 ### 2. **Binning**
 
-To make the mapping to Dandisets more efficient, the reduced logs are binned by their object keys (asset blob IDs) for fast lookup.
+To make the mapping to Dandisets more efficient, the reduced logs are binned by their object keys (asset blob IDs) for fast lookup. Zarr assets specifically group by the parent blob ID, *e.g.*, a request for `zarr/abcdefg/group1/dataset1/0` will be binned by `zarr/abcdefg`.
 
 This step reduces the total file sizes from step (1) even further by reducing repeated object keys, though it does create a large number of small files.
 
@@ -126,7 +126,6 @@ The `--file_processing_limit < integer >` flag can be used to limit the number o
 bin_all_reduced_s3_logs_by_object_key \
   --reduced_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-reduced \
   --binned_s3_logs_folder_path /mnt/backup/dandi/dandiarchive-logs-binned \
-  --file_limit 20
 ```
 
 In the summer of 2024, this process took less than 5 hours to bin all 170 GB of reduced logs into the 80 GB of data per object key.
