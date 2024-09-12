@@ -44,10 +44,10 @@ def get_region_from_ip_address(
         raise ValueError(message)  # pragma: no cover
     ip_hash_salt = bytes.fromhex(os.environ["IP_HASH_SALT"])
 
-    # Probably a legitimate user, so fetch the geographic region
+    # Hash for anonymization within the cache
     ip_hash = hashlib.sha1(string=bytes(ip_address, "utf-8") + ip_hash_salt).hexdigest()
 
-    # Early return for speed
+    # Early return from the cache for faster performance
     lookup_result = ip_hash_to_region.get(ip_hash, None)
     if lookup_result is not None:
         return lookup_result
@@ -55,17 +55,28 @@ def get_region_from_ip_address(
     # Determine if IP address belongs to GitHub, AWS, Google, or known VPNs
     # Azure not yet easily doable; keep an eye on
     # https://learn.microsoft.com/en-us/answers/questions/1410071/up-to-date-azure-public-api-to-get-azure-ip-ranges
-    # and others, maybe it will change in the future
+    # maybe it will change in the future
     if ip_hash_not_in_services.get(ip_hash, None) is None:
         for service_name in _KNOWN_SERVICES:
-            cidr_addresses = _get_cidr_address_ranges(service_name=service_name)
+            cidr_addresses_and_subregions = _get_cidr_address_ranges_and_subregions(service_name=service_name)
 
-            if any(
-                ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
-                for cidr_address in cidr_addresses
-            ):
-                ip_hash_to_region[ip_hash] = service_name
-                return service_name
+            matched_cidr_address_and_subregion = next(
+                (
+                    (cidr_address, subregion)
+                    for cidr_address, subregion in cidr_addresses_and_subregions
+                    if ipaddress.ip_address(address=ip_address) in ipaddress.ip_network(address=cidr_address)
+                ),
+                None,
+            )
+            if matched_cidr_address_and_subregion is not None:
+                region_service_string = service_name
+
+                subregion = matched_cidr_address_and_subregion[1]
+                if subregion is not None:
+                    region_service_string += f"/{subregion}"
+
+                ip_hash_to_region[ip_hash] = region_service_string
+                return region_service_string
     ip_hash_not_in_services[ip_hash] = True
 
     # Log errors in IP fetching
@@ -105,41 +116,67 @@ def get_region_from_ip_address(
 
 
 @functools.lru_cache
-def _get_cidr_address_ranges(*, service_name: str) -> list[str]:
+def _get_cidr_address_ranges_and_subregions(*, service_name: str) -> list[tuple[str, str | None]]:
+    cidr_request = _request_cidr_range(service_name=service_name)
     match service_name:
         case "GitHub":
-            github_cidr_request = requests.get(url="https://api.github.com/meta").json()
             skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
-            keys = set(github_cidr_request.keys()) - set(skip_keys)
-            github_cidr_addresses = [
-                cidr_address
+            keys = set(cidr_request.keys()) - set(skip_keys)
+            github_cidr_addresses_and_subregions = [
+                (cidr_address, None)
                 for key in keys
-                for cidr_address in github_cidr_request[key]
+                for cidr_address in cidr_request[key]
                 if "::" not in cidr_address
                 # Skip IPv6
             ]
 
-            return github_cidr_addresses
+            return github_cidr_addresses_and_subregions
         # Note: these endpoints also return the 'locations' of the specific subnet, such as 'us-east-2'
         case "AWS":
-            aws_cidr_request = requests.get(url="https://ip-ranges.amazonaws.com/ip-ranges.json").json()
-            aws_cidr_addresses = [prefix["ip_prefix"] for prefix in aws_cidr_request["prefixes"]]
+            aws_cidr_addresses_and_subregions = [
+                (prefix["ip_prefix"], prefix.get("region", None)) for prefix in cidr_request["prefixes"]
+            ]
 
-            return aws_cidr_addresses
+            return aws_cidr_addresses_and_subregions
         case "GCP":
-            gcp_cidr_request = requests.get(url="https://www.gstatic.com/ipranges/cloud.json").json()
-            gcp_cidr_addresses = [
-                prefix["ipv4Prefix"]
-                for prefix in gcp_cidr_request["prefixes"]
+            gcp_cidr_addresses_and_subregions = [
+                (prefix["ipv4Prefix"], prefix.get("scope", None))
+                for prefix in cidr_request["prefixes"]
                 if "ipv4Prefix" in prefix  # Not handling IPv6 yet
             ]
 
-            return gcp_cidr_addresses
+            return gcp_cidr_addresses_and_subregions
         case "Azure":
             raise NotImplementedError("Azure CIDR address fetching is not yet implemented!")  # pragma: no cover
         case "VPN":
+            vpn_cidr_addresses_and_subregions = [(cidr_address, None) for cidr_address in cidr_request]
+
+            return vpn_cidr_addresses_and_subregions
+        case _:
+            raise ValueError(f"Service name '{service_name}' is not supported!")  # pragma: no cover
+
+
+@functools.lru_cache
+def _request_cidr_range(service_name: str) -> dict:
+    """Cache (in-memory) the requests to external services."""
+    match service_name:
+        case "GitHub":
+            github_cidr_request = requests.get(url="https://api.github.com/meta").json()
+
+            return github_cidr_request
+        case "AWS":
+            aws_cidr_request = requests.get(url="https://ip-ranges.amazonaws.com/ip-ranges.json").json()
+
+            return aws_cidr_request
+        case "GCP":
+            gcp_cidr_request = requests.get(url="https://www.gstatic.com/ipranges/cloud.json").json()
+
+            return gcp_cidr_request
+        case "Azure":
+            raise NotImplementedError("Azure CIDR address fetching is not yet implemented!")
+        case "VPN":
             # Very nice public and maintained listing! Hope this stays stable.
-            vpn_cidr_addresses = (
+            vpn_cidr_request = (
                 requests.get(
                     url="https://raw.githubusercontent.com/josephrocca/is-vpn/main/vpn-or-datacenter-ipv4-ranges.txt"
                 )
@@ -147,7 +184,7 @@ def _get_cidr_address_ranges(*, service_name: str) -> list[str]:
                 .splitlines()
             )
 
-            return vpn_cidr_addresses
+            return vpn_cidr_request
         case _:
             raise ValueError(f"Service name '{service_name}' is not supported!")  # pragma: no cover
 
@@ -157,16 +194,16 @@ def _load_ip_hash_cache(*, name: Literal["region", "services"]) -> dict[str, str
     match name:
         case "region":
             if not _IP_HASH_TO_REGION_FILE_PATH.exists():
-                return {}  # pragma: no cover
+                return dict()  # pragma: no cover
 
             with open(file=_IP_HASH_TO_REGION_FILE_PATH) as stream:
-                return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+                return yaml.load(stream=stream, Loader=yaml.SafeLoader) or dict()
         case "services":
             if not _IP_HASH_NOT_IN_SERVICES_FILE_PATH.exists():
-                return {}  # pragma: no cover
+                return dict()  # pragma: no cover
 
             with open(file=_IP_HASH_NOT_IN_SERVICES_FILE_PATH) as stream:
-                return yaml.load(stream=stream, Loader=yaml.SafeLoader)
+                return yaml.load(stream=stream, Loader=yaml.SafeLoader) or dict()
         case _:
             raise ValueError(f"Name '{name}' is not recognized!")  # pragma: no cover
 
