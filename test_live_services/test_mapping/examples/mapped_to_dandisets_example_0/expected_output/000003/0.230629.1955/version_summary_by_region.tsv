@@ -1,0 +1,4 @@
+region	bytes_sent
+AWS	1234
+GCP	512
+unknown	512
