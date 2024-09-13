@@ -111,7 +111,7 @@ def _map_binned_logs_to_dandiset(
     dandiset_id = dandiset.identifier
     dandiset_log_folder_path = dandiset_logs_folder_path / dandiset_id
 
-    all_reduced_s3_logs_per_blob_id = dict()
+    all_reduced_s3_logs_per_blob_id_aggregated_by_day = dict()
     blob_id_to_asset_path = dict()
     total_bytes_across_versions_by_blob_id = dict()
     dandiset_versions = list(dandiset.get_versions())
@@ -191,8 +191,9 @@ def _map_binned_logs_to_dandiset(
             )
 
             reordered_reduced_s3_log["date"] = [entry[:10] for entry in reordered_reduced_s3_log["timestamp"]]
-            reduced_s3_logs_per_day.append(reordered_reduced_s3_log)
-            all_reduced_s3_logs_per_blob_id[blob_id] = reordered_reduced_s3_log
+            aggregated_activity_by_day = _aggregate_activity_by_day(reduced_s3_logs_per_day=[reordered_reduced_s3_log])
+            reduced_s3_logs_per_day.append(aggregated_activity_by_day)
+            all_reduced_s3_logs_per_blob_id_aggregated_by_day[blob_id] = aggregated_activity_by_day
 
             total_bytes = sum(reduced_s3_log_binned_by_blob_id["bytes_sent"])
             total_bytes_per_asset_path[asset.path] = total_bytes
@@ -204,8 +205,8 @@ def _map_binned_logs_to_dandiset(
             continue  # No activity found (possible dandiset version was never accessed); skip to next version
 
         version_summary_by_day_file_path = dandiset_version_log_folder_path / "version_summary_by_day.tsv"
-        _write_aggregated_activity_by_day(
-            reduced_s3_logs_per_day=reduced_s3_logs_per_day, file_path=version_summary_by_day_file_path
+        aggregated_activity_by_day.to_csv(
+            path_or_buf=version_summary_by_day_file_path, mode="w", sep="\t", header=True, index=False
         )
 
         version_summary_by_region_file_path = dandiset_version_log_folder_path / "version_summary_by_region.tsv"
@@ -218,7 +219,7 @@ def _map_binned_logs_to_dandiset(
             total_bytes_per_asset_path=total_bytes_per_asset_path, file_path=version_summary_by_asset_file_path
         )
 
-    if len(all_reduced_s3_logs_per_blob_id) == 0:
+    if len(all_reduced_s3_logs_per_blob_id_aggregated_by_day) == 0:
         return None  # No activity found (possible dandiset was never accessed); skip to next version
 
     # Single path across versions could have been replaced at various points by a new blob
@@ -228,13 +229,13 @@ def _map_binned_logs_to_dandiset(
 
     dandiset_summary_by_day_file_path = dandiset_log_folder_path / "dandiset_summary_by_day.tsv"
     _write_aggregated_activity_by_day(
-        reduced_s3_logs_per_day=all_reduced_s3_logs_per_blob_id.values(),
+        reduced_s3_logs_per_day=all_reduced_s3_logs_per_blob_id_aggregated_by_day.values(),
         file_path=dandiset_summary_by_day_file_path,
     )
 
     dandiset_summary_by_region_file_path = dandiset_log_folder_path / "dandiset_summary_by_region.tsv"
     _write_aggregated_activity_by_region(
-        reduced_s3_logs_per_day=all_reduced_s3_logs_per_blob_id.values(),
+        reduced_s3_logs_per_day=all_reduced_s3_logs_per_blob_id_aggregated_by_day.values(),
         file_path=dandiset_summary_by_region_file_path,
     )
 
