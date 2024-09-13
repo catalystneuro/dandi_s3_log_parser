@@ -10,7 +10,7 @@ packages = ["src/dandi_s3_log_parser"]
 
 [project]
 name = "dandi_s3_log_parser"
-version="0.4.1"
+version="0.4.2"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
