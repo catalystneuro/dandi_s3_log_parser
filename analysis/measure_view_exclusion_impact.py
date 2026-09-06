@@ -22,7 +22,9 @@ Efficient reruns (``--cache-parquet``)
 The sessionization walk is the expensive part (hours to days). With
 ``--cache-parquet`` the per-(dataset, IP) view counts are written to
 ``<cache-dir>/analysis_cache/view_exclusion_pairs.parquet`` — co-located with the
-original data. The raw IP is NOT stored: it is replaced by a salted keyed hash, and
+original data (falling back to ``view_exclusion_pairs.csv.gz`` if no parquet engine is
+installed). The report always prints BEFORE this write, so a missing optional dependency
+can never discard a multi-hour walk. The raw IP is NOT stored: it is replaced by a salted keyed hash, and
 the coarse ip_to_region *label* (e.g. ``GitHub`` or ``US/California``) is stored so
 the exclusion can be re-applied instantly on later runs without another walk. The
 stored label is frozen at build time; pass ``--rebuild-cache`` to refresh it after
@@ -72,6 +74,42 @@ def _service_of(label: str) -> str:
     """Coarse service name for the breakdown (GitHub / AWS / GCP / VPN / other)."""
     head = label.split("/", 1)[0] if label else ""
     return head if head in {"GitHub", "AWS", "GCP", "VPN"} else "other"
+
+
+def _persist_pairs(pairs: pd.DataFrame, cache_dir: pathlib.Path) -> pathlib.Path | None:
+    """
+    Persist the (already privacy-safe: hashed IP + coarse label) pairs next to the data.
+
+    Tries parquet first; if no parquet engine is installed, falls back to gzipped CSV so a
+    multi-hour walk is never lost to a missing optional dependency. Returns the path written,
+    or None if both attempts fail (the report has already printed by the time this runs).
+    """
+    base = cache_dir / "analysis_cache"
+    base.mkdir(parents=True, exist_ok=True)
+    parquet_path = base / "view_exclusion_pairs.parquet"
+    try:
+        pairs.to_parquet(parquet_path, index=False)
+        return parquet_path
+    except ImportError:
+        csv_path = base / "view_exclusion_pairs.csv.gz"
+        pairs.to_csv(csv_path, index=False, compression="gzip")
+        print("  (pyarrow/fastparquet not installed — wrote gzipped CSV instead; " "same hashed-IP contents)")
+        return csv_path
+
+
+def _load_pairs(cache_dir: pathlib.Path) -> pd.DataFrame | None:
+    """Load a previously persisted cache, preferring parquet then gzipped CSV. None if neither exists."""
+    base = cache_dir / "analysis_cache"
+    parquet_path = base / "view_exclusion_pairs.parquet"
+    csv_path = base / "view_exclusion_pairs.csv.gz"
+    if parquet_path.exists():
+        try:
+            return pd.read_parquet(parquet_path)
+        except ImportError:
+            pass
+    if csv_path.exists():
+        return pd.read_csv(csv_path, dtype={"dataset_id": str, "ip_hash": str, "region_label": str})
+    return None
 
 
 def build_view_pairs(
@@ -159,6 +197,20 @@ def report(pairs: pd.DataFrame, is_cloud_service_or_vpn_label) -> None:
     for service, count in sorted(by_service.items(), key=lambda kv: -kv[1]):
         print(f"    {service:>7}: {count:,}")
 
+    print("\n--- Sensitivity: kept_views under each exclusion tier ---")
+    services = pairs["region_label"].map(_service_of)
+    tiers = [
+        ("GitHub only", {"GitHub"}),
+        ("GitHub + VPN", {"GitHub", "VPN"}),
+        ("GitHub + VPN + AWS", {"GitHub", "VPN", "AWS"}),
+        ("all four (GitHub/VPN/AWS/GCP)", {"GitHub", "VPN", "AWS", "GCP"}),
+    ]
+    for name, drop in tiers:
+        tier_excluded = int(pairs.loc[services.isin(drop), "n_views"].sum())
+        tier_kept = total_views - tier_excluded
+        tier_pct = 100 * tier_excluded / max(total_views, 1)
+        print(f"    {name:<30}: kept {tier_kept:,}  (−{tier_excluded:,}, −{tier_pct:.2f}%)")
+
     print("\n--- Datasets most affected (by % of views excluded) ---")
     per_total = pairs.groupby("dataset_id")["n_views"].sum()
     per_excluded = pairs[excluded_mask].groupby("dataset_id")["n_views"].sum()
@@ -195,11 +247,14 @@ def main() -> None:
 
     collect_asset_views, load_ip_cache, is_cloud_service_or_vpn_label = _load_library()
 
-    cache_path = args.cache_dir / "analysis_cache" / "view_exclusion_pairs.parquet"
+    cached = None
+    if args.cache_parquet and not args.rebuild_cache:
+        cached = _load_pairs(args.cache_dir)
 
-    if args.cache_parquet and cache_path.exists() and not args.rebuild_cache:
-        pairs = pd.read_parquet(cache_path)
-        print(f"Loaded {len(pairs):,} (dataset, IP) rows from cache {cache_path} (skipped the walk)")
+    if cached is not None:
+        pairs = cached
+        print(f"Loaded {len(pairs):,} (dataset, IP) rows from analysis_cache (skipped the walk)")
+        walked = False
     else:
         print("Loading ip_to_region cache (the exact source the summaries use)...")
         ip_to_region = load_ip_cache(
@@ -214,16 +269,20 @@ def main() -> None:
             ip_to_region=ip_to_region,
             max_assets=args.max_assets,
         )
-        if args.cache_parquet:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            pairs.to_parquet(cache_path, index=False)
-            print(f"Cached {len(pairs):,} (dataset, IP) rows to {cache_path} (IPs stored as a salted hash)")
+        walked = True
 
     if pairs.empty:
         print("No views found.")
         return
 
+    # Print the report BEFORE persisting: the number is the deliverable, and a persistence
+    # failure (e.g. a missing parquet engine) must never throw away a multi-hour walk.
     report(pairs, is_cloud_service_or_vpn_label)
+
+    if args.cache_parquet and walked:
+        written = _persist_pairs(pairs, args.cache_dir)
+        if written is not None:
+            print(f"\nCached {len(pairs):,} (dataset, IP) rows to {written} (IPs stored as a salted hash)")
 
 
 if __name__ == "__main__":
