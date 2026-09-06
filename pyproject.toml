@@ -140,7 +140,7 @@ known-first-party = ["s3_log_extraction"]
 
 
 [tool.codespell]
-skip = "*/ip_utils/_data/*"  # ISO 3166 codes (THA, SOM, ...) are not typos
+skip = "*/ip_utils/_data/*"  # Three-letter ISO 3166 codes look like misspelled words
 
 
 [tool.pytest.ini_options]
