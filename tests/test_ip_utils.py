@@ -6,7 +6,6 @@ import tarfile
 import unittest.mock
 
 import geoip2.errors
-import opencage.geocoder
 import py
 import pytest
 import yaml
@@ -19,8 +18,19 @@ from s3_log_extraction.ip_utils._geolite2 import (
     open_geolite2_database,
     update_geolite2_database,
 )
+from s3_log_extraction.ip_utils._region_codes import country_alpha_2_to_alpha_3, get_region_coordinates
 from s3_log_extraction.ip_utils._update_ip_to_region_codes import _get_region_code_from_ip_address
-from s3_log_extraction.ip_utils._update_region_code_coordinates import _get_opencage_query
+
+# Loose bounding boxes (south, north, west, east) used to check that a coordinate lands in the right place
+_CALIFORNIA_BOX = (32.0, 42.5, -125.0, -114.0)
+_ENGLAND_BOX = (49.5, 56.0, -6.5, 2.0)
+_BAVARIA_BOX = (47.0, 50.7, 8.9, 13.9)
+_CONTIGUOUS_US_BOX = (24.0, 50.0, -125.0, -66.0)
+
+
+def _assert_within(coordinates: dict[str, float], box: tuple[float, float, float, float]) -> None:
+    south, north, west, east = box
+    assert south < coordinates["latitude"] < north and west < coordinates["longitude"] < east, coordinates
 
 
 def _make_city_response(
@@ -71,9 +81,7 @@ def test_ip_utils(tmpdir: py.path.local, monkeypatch: pytest.MonkeyPatch) -> Non
     expected_cache = base_tests_dir / "expected_output"
     expected_ips_dir = expected_cache / "ips"
 
-    # Provide a non-None dummy key so the guard check in the coordinates update passes without real credentials.
-    # No actual API calls are made because the ips cache is pre-seeded with expected output below.
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
+    # No credentials: the ips cache is pre-seeded with expected output below, so the database is never needed.
     monkeypatch.delenv("MAXMIND_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("MAXMIND_LICENSE_KEY", raising=False)
 
@@ -95,11 +103,11 @@ def test_refresh_ip_to_region_codes(tmpdir: py.path.local) -> None:
 
     # Seed the cache with known IPs and regions using RFC 5737 TEST-NET-1 documentation addresses (bogons)
     initial_ip_to_region = {
-        "192.0.2.1": "US/CA",
-        "192.0.2.2": "US/NY",
-        "192.0.2.3": "US/TX",
-        "192.0.2.4": "GB/ENG",
-        "192.0.2.5": "DE/BY",
+        "192.0.2.1": "USA/CA",
+        "192.0.2.2": "USA/NY",
+        "192.0.2.3": "USA/TX",
+        "192.0.2.4": "GBR/ENG",
+        "192.0.2.5": "DEU/BY",
     }
     ip_to_region_file = test_ips_dir / "ip_to_region.yaml"
     ip_to_region_file.write_text(yaml.dump(initial_ip_to_region))
@@ -109,7 +117,7 @@ def test_refresh_ip_to_region_codes(tmpdir: py.path.local) -> None:
     # With 5 IPs and partition_size = ceil(5/90) = 1, partition_index = 0 picks sorted_ips[0:1]
     sorted_ips = sorted(initial_ip_to_region.keys())
     expected_refreshed_ip = sorted_ips[0]  # "192.0.2.1"
-    new_region_for_refreshed_ip = "US/OR"
+    new_region_for_refreshed_ip = "USA/OR"
 
     def mock_get_region_code(ip_address: str, geolite2_reader: object) -> str:
         if ip_address == expected_refreshed_ip:
@@ -148,7 +156,7 @@ def test_refresh_ip_to_region_codes(tmpdir: py.path.local) -> None:
     assert log_data["partition_index"] == 0
     assert log_data["ips_checked"] == 1
     assert expected_refreshed_ip in log_data["changes"]
-    assert log_data["changes"][expected_refreshed_ip]["old"] == "US/CA"
+    assert log_data["changes"][expected_refreshed_ip]["old"] == "USA/CA"
     assert log_data["changes"][expected_refreshed_ip]["new"] == new_region_for_refreshed_ip
 
 
@@ -158,7 +166,7 @@ def test_refresh_ip_to_region_codes_no_changes(tmpdir: py.path.local) -> None:
     test_ips_dir = test_cache / "ips"
     test_ips_dir.mkdir(parents=True)
 
-    initial_ip_to_region = {"192.0.2.1": "US/CA"}
+    initial_ip_to_region = {"192.0.2.1": "USA/CA"}
     ip_to_region_file = test_ips_dir / "ip_to_region.yaml"
     ip_to_region_file.write_text(yaml.dump(initial_ip_to_region))
 
@@ -209,9 +217,10 @@ def test_refresh_ip_to_region_codes_empty_cache(tmpdir: py.path.local, monkeypat
 @pytest.mark.parametrize(
     ("country_code", "subdivision_codes", "expected_region"),
     [
-        ("US", ("CA",), "US/CA"),
-        ("GB", ("ENG", "WSM"), "GB/ENG"),  # The first-level subdivision is used, not the most specific
-        ("US", (), "US"),
+        ("US", ("CA",), "USA/CA"),
+        ("GB", ("ENG", "WSM"), "GBR/ENG"),  # The first-level subdivision is used, not the most specific
+        ("US", (), "USA"),
+        ("XK", ("01",), "XK/01"),  # Kosovo has no ISO 3166-1 alpha-3 code, so the alpha-2 code is kept
         (None, ("CA",), None),
         (None, (), None),
     ],
@@ -318,7 +327,7 @@ def test_update_ip_to_region_codes_resolves_new_ips(tmp_path: pathlib.Path) -> N
 
     ip_to_region_file = tmp_path / "ips" / "ip_to_region.yaml"
     ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert ip_to_region == {"8.8.8.8": "US/CA", "1.1.1.1": "AU", "192.0.2.1": "bogon"}
+    assert ip_to_region == {"8.8.8.8": "USA/CA", "1.1.1.1": "AUS", "192.0.2.1": "bogon"}
     mock_open.assert_called_once()
 
     # A second run with nothing new must not open the database again
@@ -353,7 +362,7 @@ def test_update_ip_to_region_codes_batch_limit(tmp_path: pathlib.Path) -> None:
     ip_to_region_file = tmp_path / "ips" / "ip_to_region.yaml"
     ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
     assert len(ip_to_region) == 2
-    assert set(ip_to_region.values()) == {"US"}
+    assert set(ip_to_region.values()) == {"USA"}
 
 
 @pytest.mark.ai_generated
@@ -483,72 +492,77 @@ def test_open_geolite2_database_warns_on_stale_copy_without_credentials(
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    ("country_and_region_code", "expected_query", "expected_country_code"),
+    ("alpha_2", "expected_alpha_3"),
     [
-        ("US/CA", "California, United States", "us"),
-        ("GB/ENG", "England, United Kingdom", "gb"),
-        ("US", "United States", "us"),
-        ("US/ZZ", "ZZ, United States", "us"),  # Unknown subdivision passes through under the country restriction
-        ("XX/YY", "XX/YY", None),  # Unknown country: nothing to expand or restrict
+        ("US", "USA"),
+        ("GB", "GBR"),
+        ("de", "DEU"),  # Case-insensitive input
+        ("XK", "XK"),  # Kosovo is outside ISO 3166-1, so there is nothing to convert to
+        ("ZZ", "ZZ"),
     ],
 )
-def test_get_opencage_query(
-    country_and_region_code: str, expected_query: str, expected_country_code: str | None
-) -> None:
-    assert _get_opencage_query(country_and_region_code) == (expected_query, expected_country_code)
+def test_country_alpha_2_to_alpha_3(alpha_2: str, expected_alpha_3: str) -> None:
+    assert country_alpha_2_to_alpha_3(alpha_2) == expected_alpha_3
 
 
 @pytest.mark.ai_generated
-def test_update_region_code_coordinates_geocodes_places(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Geographic labels are geocoded by name with a country restriction and cached with their coordinates."""
+def test_get_region_coordinates_known_subdivisions() -> None:
+    """Subdivision points land in the right place, including first-level regions Natural Earth only maps finer."""
+    _assert_within(get_region_coordinates("USA/CA"), _CALIFORNIA_BOX)
+    _assert_within(get_region_coordinates("DEU/BY"), _BAVARIA_BOX)
+    # England has no Natural Earth unit of its own; its point is aggregated from its counties via ISO 3166-2
+    _assert_within(get_region_coordinates("GBR/ENG"), _ENGLAND_BOX)
+
+
+@pytest.mark.ai_generated
+def test_get_region_coordinates_country_fallbacks() -> None:
+    """A bare country label and an unknown subdivision both resolve to the country's point; unknown countries do not."""
+    country_coordinates = get_region_coordinates("USA")
+    _assert_within(country_coordinates, _CONTIGUOUS_US_BOX)
+    assert get_region_coordinates("USA/ZZ") == country_coordinates
+    assert get_region_coordinates("XX/YY") is None
+    assert get_region_coordinates("XX") is None
+
+
+@pytest.mark.ai_generated
+def test_update_region_code_coordinates_looks_up_places(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture) -> None:
+    """Geographic labels are resolved from the bundled tables with no credentials, and unknown ones are reported."""
     test_ips_dir = tmp_path / "ips"
     test_ips_dir.mkdir(parents=True)
-    (test_ips_dir / "ip_to_region.yaml").write_text(yaml.dump({"8.8.8.8": "US/CA", "192.0.2.1": "bogon"}))
+    (test_ips_dir / "ip_to_region.yaml").write_text(
+        yaml.dump({"8.8.8.8": "USA/CA", "192.0.2.1": "bogon", "1.1.1.1": "AUS", "9.9.9.9": "XX/YY"})
+    )
 
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
-
-    mock_geocoder = unittest.mock.MagicMock()
-    mock_geocoder.geocode.return_value = [{"geometry": {"lat": 36.7783, "lng": -119.4179}}]
-
-    with unittest.mock.patch("opencage.geocoder.OpenCageGeocode", return_value=mock_geocoder):
+    with unittest.mock.patch("requests.get") as mock_get:
         s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
-
-    mock_geocoder.geocode.assert_called_once_with("California, United States", countrycode="us")
+    mock_get.assert_not_called()
 
     coordinates = yaml.safe_load((test_ips_dir / "region_codes_to_coordinates.yaml").read_text())
-    assert coordinates["US/CA"] == {"latitude": 36.7783, "longitude": -119.4179}
+    _assert_within(coordinates["USA/CA"], _CALIFORNIA_BOX)
+    assert coordinates["AUS"] == get_region_coordinates("AUS")
     assert coordinates["bogon"] == {"latitude": None, "longitude": None}
+    assert "XX/YY" not in coordinates
+    assert "XX/YY" in capsys.readouterr().out
 
 
 @pytest.mark.ai_generated
-def test_update_region_code_coordinates_locates_services_with_geolite2(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Cloud service regions are located by geolocating an address from their CIDR range, not by geocoding."""
+def test_update_region_code_coordinates_locates_services_with_geolite2(tmp_path: pathlib.Path) -> None:
+    """Cloud service regions are located by geolocating an address from their CIDR range, not from the tables."""
     test_ips_dir = tmp_path / "ips"
     test_ips_dir.mkdir(parents=True)
     (test_ips_dir / "ip_to_region.yaml").write_text(yaml.dump({"52.0.0.1": "AWS/us-west-2"}))
 
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
-
-    mock_geocoder = unittest.mock.MagicMock()
     reader = _make_reader(city_responses={"52.0.0.0": _make_city_response(latitude=45.8399, longitude=-119.7006)})
 
-    with unittest.mock.patch("opencage.geocoder.OpenCageGeocode", return_value=mock_geocoder):
+    with unittest.mock.patch(
+        "s3_log_extraction.ip_utils._update_region_code_coordinates.open_geolite2_database", return_value=reader
+    ):
         with unittest.mock.patch(
-            "s3_log_extraction.ip_utils._update_region_code_coordinates.open_geolite2_database", return_value=reader
+            "s3_log_extraction.ip_utils._update_region_code_coordinates._get_cidr_address_ranges_and_subregions",
+            return_value=[("52.0.0.0/8", "us-west-2")],
         ):
-            with unittest.mock.patch(
-                "s3_log_extraction.ip_utils._update_region_code_coordinates._get_cidr_address_ranges_and_subregions",
-                return_value=[("52.0.0.0/8", "us-west-2")],
-            ):
-                s3_log_extraction.ip_utils.update_region_code_coordinates(
-                    cache_directory=tmp_path, use_encryption=False
-                )
+            s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
 
-    mock_geocoder.geocode.assert_not_called()
     reader.close.assert_called_once()
 
     expected_coordinates = {"latitude": 45.8399, "longitude": -119.7006}
@@ -556,28 +570,3 @@ def test_update_region_code_coordinates_locates_services_with_geolite2(
     assert coordinates["AWS/us-west-2"] == expected_coordinates
     service_coordinates = yaml.safe_load((test_ips_dir / "service_coordinates.yaml").read_text())
     assert service_coordinates == {"AWS/us-west-2": expected_coordinates}
-
-
-@pytest.mark.ai_generated
-def test_update_region_code_coordinates_handles_opencage_quota_exceeded(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """update_region_code_coordinates saves partial progress instead of crashing when the quota is exhausted."""
-    test_ips_dir = tmp_path / "ips"
-    test_ips_dir.mkdir(parents=True)
-    (test_ips_dir / "ip_to_region.yaml").write_text(yaml.dump({"8.8.8.8": "US/CA"}))
-
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
-
-    mock_geocoder = unittest.mock.MagicMock()
-    mock_geocoder.geocode.side_effect = opencage.geocoder.RateLimitExceededError()
-
-    with unittest.mock.patch("opencage.geocoder.OpenCageGeocode", return_value=mock_geocoder):
-        with pytest.warns(RuntimeWarning, match="quota exceeded"):
-            s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
-
-    # The run must complete and write the (partial) coordinates cache
-    coordinates_file = test_ips_dir / "region_codes_to_coordinates.yaml"
-    assert coordinates_file.exists()
-    assert "US/CA" not in (yaml.safe_load(coordinates_file.read_text()) or {})

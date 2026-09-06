@@ -2,14 +2,13 @@
 
 These tests require real credentials and live network access.
 They are marked ``@pytest.mark.remote`` and are run only in the dedicated
-remote-testing CI workflow, which supplies valid ``MAXMIND_ACCOUNT_ID``,
-``MAXMIND_LICENSE_KEY``, and ``OPENCAGE_API_KEY`` environment variables.
+remote-testing CI workflow, which supplies valid ``MAXMIND_ACCOUNT_ID`` and
+``MAXMIND_LICENSE_KEY`` environment variables.
 """
 
 import os
 import pathlib
 import re
-import warnings
 
 import pytest
 import yaml
@@ -18,8 +17,8 @@ import s3_log_extraction
 
 _AUTH_ERROR_PATTERNS = ("401", "403", "Unknown token", "Unauthorized", "not authorized")
 
-# ISO 3166-1 alpha-2 country code, optionally followed by an ISO 3166-2 subdivision code
-_REGION_LABEL_PATTERN = re.compile(r"^[A-Z]{2}(/[A-Z0-9]{1,3})?$")
+# ISO 3166-1 alpha-3 country code, optionally followed by an ISO 3166-2 subdivision code
+_REGION_LABEL_PATTERN = re.compile(r"^[A-Z]{3}(/[A-Z0-9]{1,3})?$")
 
 
 def _is_auth_error(exc: Exception) -> bool:
@@ -28,20 +27,18 @@ def _is_auth_error(exc: Exception) -> bool:
     return any(pattern.lower() in exc_str for pattern in _AUTH_ERROR_PATTERNS)
 
 
-def _skip_if_quota_exceeded(captured_warnings: list[warnings.WarningMessage]) -> None:
-    """Skip the current test if a quota-exceeded warning was emitted during the update call.
-
-    The update functions halt early with a ``RuntimeWarning`` when an API quota is exhausted.
-    That is an expected transient state of the shared API accounts, not a code or token failure,
-    so the live-lookup assertions cannot be validated and the test is skipped.
-    """
-    if any("quota exceeded" in str(captured_warning.message).lower() for captured_warning in captured_warnings):
-        pytest.skip("API request quota is currently exhausted; cannot validate live lookups.")
-
-
 def _assert_maxmind_credentials_are_set() -> None:
     for name in ("MAXMIND_ACCOUNT_ID", "MAXMIND_LICENSE_KEY"):
         assert os.environ.get(name, "").strip(), f"{name} environment variable must be set to a non-empty value"
+
+
+def _fail_if_maxmind_rejected(exc: Exception) -> None:
+    if _is_auth_error(exc):
+        pytest.fail(
+            f"MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY are set but were rejected by MaxMind ({exc}). "
+            "Please verify that the GitHub secrets contain a valid account ID and a license key with GeoLite2 "
+            "download permission from https://www.maxmind.com/en/accounts/current/license-key"
+        )
 
 
 @pytest.mark.remote
@@ -60,12 +57,7 @@ def test_update_geolite2_database_remote(tmp_path: pathlib.Path) -> None:
     try:
         database_path = s3_log_extraction.ip_utils.update_geolite2_database(cache_directory=tmp_path)
     except Exception as exc:
-        if _is_auth_error(exc):
-            pytest.fail(
-                f"MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY are set but were rejected by MaxMind ({exc}). "
-                "Please verify that the GitHub secrets contain a valid account ID and a license key with GeoLite2 "
-                "download permission from https://www.maxmind.com/en/accounts/current/license-key"
-            )
+        _fail_if_maxmind_rejected(exc)
         raise
 
     assert database_path == s3_log_extraction.ip_utils.get_geolite2_database_path(cache_directory=tmp_path)
@@ -99,12 +91,7 @@ def test_update_ip_to_region_codes_remote(tmp_path: pathlib.Path) -> None:
     try:
         s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
     except Exception as exc:
-        if _is_auth_error(exc):
-            pytest.fail(
-                f"MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY are set but were rejected by MaxMind ({exc}). "
-                "Please verify that the GitHub secrets contain a valid account ID and a license key with GeoLite2 "
-                "download permission from https://www.maxmind.com/en/accounts/current/license-key"
-            )
+        _fail_if_maxmind_rejected(exc)
         raise
 
     ip_cache_dir = tmp_path / "ips"
@@ -116,59 +103,44 @@ def test_update_ip_to_region_codes_remote(tmp_path: pathlib.Path) -> None:
     region = ip_to_region[test_ip]
     assert isinstance(region, str) and _REGION_LABEL_PATTERN.match(
         region
-    ), f"Expected an ISO 3166 label such as 'US/CA', got: {region!r}"
+    ), f"Expected an ISO 3166 label such as 'USA/CA', got: {region!r}"
+
+    # The resolved label must also have coordinates in the bundled tables, so that the heat maps can place it
+    s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+    coordinates = yaml.safe_load((ip_cache_dir / "region_codes_to_coordinates.yaml").read_text()) or {}
+    assert region in coordinates, f"Expected '{region}' to have coordinates, got keys: {list(coordinates.keys())}"
+    assert isinstance(coordinates[region]["latitude"], float) and isinstance(coordinates[region]["longitude"], float)
 
 
 @pytest.mark.remote
 @pytest.mark.ai_generated
-def test_update_region_code_coordinates_remote(tmp_path: pathlib.Path) -> None:
+def test_update_region_code_coordinates_locates_aws_region_remote(tmp_path: pathlib.Path) -> None:
     """
-    Test that update_region_code_coordinates resolves coordinates via the OpenCage API.
-
-    Pre-populates the IP cache with a ``US/CA`` region code (not present
-    in the built-in defaults) to force a live OpenCage geocoding call.
+    Test that a cloud service region is located with the GeoLite2 database and the live AWS IP range listing.
 
     Parameters
     ----------
     tmp_path : pathlib.Path
         Pytest-provided temporary directory for test isolation.
     """
-    region_code = "US/CA"
+    region_code = "AWS/us-east-1"
 
-    opencage_api_key = os.environ.get("OPENCAGE_API_KEY", "")
-    assert opencage_api_key.strip(), "OPENCAGE_API_KEY environment variable must be set to a non-empty value"
+    _assert_maxmind_credentials_are_set()
 
     ip_cache_dir = tmp_path / "ips"
     ip_cache_dir.mkdir()
+    (ip_cache_dir / "ip_to_region.yaml").write_text(yaml.dump({"52.0.0.1": region_code}))
 
-    # Write ip_to_region.yaml with a region that requires OpenCage lookup
-    ip_to_region_file = ip_cache_dir / "ip_to_region.yaml"
-    ip_to_region_file.write_text(yaml.dump({"4.4.4.4": region_code}))
+    try:
+        s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+    except Exception as exc:
+        _fail_if_maxmind_rejected(exc)
+        raise
 
-    with warnings.catch_warnings(record=True) as captured_warnings:
-        warnings.simplefilter("always")
-        try:
-            s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
-        except Exception as exc:
-            if _is_auth_error(exc):
-                pytest.fail(
-                    f"OPENCAGE_API_KEY is set but was rejected by the OpenCage API ({exc}). "
-                    "Please verify that the OPENCAGE_API_KEY GitHub secret contains a valid key "
-                    "from https://opencagedata.com/dashboard#api-keys"
-                )
-            raise
-    _skip_if_quota_exceeded(captured_warnings)
-
-    coordinates_file = ip_cache_dir / "region_codes_to_coordinates.yaml"
-    assert coordinates_file.exists(), "region_codes_to_coordinates.yaml was not created"
-
-    coordinates = yaml.safe_load(coordinates_file.read_text()) or {}
-    assert region_code in coordinates, f"Expected '{region_code}' to be geocoded, got keys: {list(coordinates.keys())}"
+    coordinates = yaml.safe_load((ip_cache_dir / "region_codes_to_coordinates.yaml").read_text()) or {}
+    assert region_code in coordinates, f"Expected '{region_code}' to be located, got keys: {list(coordinates.keys())}"
     entry = coordinates[region_code]
-    assert (
-        "latitude" in entry and "longitude" in entry
-    ), f"Expected latitude/longitude keys in entry for '{region_code}', got: {entry}"
     assert isinstance(entry["latitude"], float), f"Expected float latitude, got: {entry['latitude']!r}"
     assert isinstance(entry["longitude"], float), f"Expected float longitude, got: {entry['longitude']!r}"
-    # California, not somewhere else called California
-    assert 32.0 < entry["latitude"] < 42.5 and -125.0 < entry["longitude"] < -114.0, entry
+    # us-east-1 is in Northern Virginia
+    assert 24.0 < entry["latitude"] < 50.0 and -125.0 < entry["longitude"] < -66.0, entry

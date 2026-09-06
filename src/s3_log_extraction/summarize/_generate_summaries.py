@@ -12,7 +12,7 @@ from .globals import (
     TIMESTAMP_FORMAT,
 )
 from ..config import get_cache_directory, get_cache_subdirectory
-from ..ip_utils import is_cloud_service_or_vpn_label, is_resolved_region, load_ip_cache
+from ..ip_utils import country_alpha_2_to_alpha_3, is_cloud_service_or_vpn_label, is_resolved_region, load_ip_cache
 from ..ip_utils._ip_utils import _read_ips_from_file
 
 
@@ -126,7 +126,9 @@ def _count_regions_and_countries(summary_file_path: pathlib.Path, /) -> tuple[in
 
         country_code, region_name = region.split("/", 1)
         if "AWS" in country_code:
-            country_code = region_name.split("-")[0].upper()
+            # AWS region names start with an alpha-2 country code ("us-east-1"); align it with the alpha-3
+            # codes of geographic labels so that the same country is not counted twice
+            country_code = country_alpha_2_to_alpha_3(region_name.split("-")[0])
         unique_countries.add(country_code)
 
     return len(regions), len(unique_countries)

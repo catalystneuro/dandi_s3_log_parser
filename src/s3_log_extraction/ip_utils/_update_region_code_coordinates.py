@@ -1,6 +1,4 @@
-import os
 import pathlib
-import warnings
 
 import natsort
 import tqdm
@@ -10,6 +8,7 @@ from ._geolite2 import open_geolite2_database
 from ._globals import _DEFAULT_REGION_CODES_TO_COORDINATES, _KNOWN_SERVICES
 from ._ip_cache import load_ip_cache, write_ip_cache
 from ._ip_utils import _get_cidr_address_ranges_and_subregions
+from ._region_codes import get_region_coordinates
 from ..config import get_cache_subdirectory
 
 
@@ -20,8 +19,8 @@ def update_region_code_coordinates(
     """
     Update the `region_codes_to_coordinates.yaml` file in the cache directory.
 
-    Geographic labels (``"US/CA"``) are geocoded with the OpenCage API, and cloud service regions
-    (``"AWS/us-east-1"``) are located with the GeoLite2 database.
+    Geographic labels (``"USA/CA"``) are looked up in the ISO 3166 coordinate tables shipped with the package, and
+    cloud service regions (``"AWS/us-east-1"``) are located with the GeoLite2 database. No web API is involved.
 
     Parameters
     ----------
@@ -32,14 +31,6 @@ def update_region_code_coordinates(
         If ``True`` (default), IP cache files are decrypted when reading and encrypted when writing.
         If ``False``, IP cache files are read and written as plaintext.
     """
-    import opencage.geocoder
-
-    opencage_api_key = os.environ.get("OPENCAGE_API_KEY", None)
-    if opencage_api_key is None:
-        message = "`OPENCAGE_API_KEY` environment variable is not set."
-        raise ValueError(message)
-    opencage_client = opencage.geocoder.OpenCageGeocode(key=opencage_api_key)
-
     ip_cache_directory = get_cache_subdirectory(cache_directory=cache_directory, name="ips")
 
     ip_to_region_codes_file_path = ip_cache_directory / "ip_to_region.yaml"
@@ -67,7 +58,7 @@ def update_region_code_coordinates(
         cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
     )
     region_codes_to_update = set(ip_to_region.values()) - set(region_codes_to_coordinates.keys())
-    opencage_failures = []
+    unresolved_region_codes = []
     geolite2_reader = None
     try:
         for country_and_region_code in tqdm.tqdm(
@@ -91,25 +82,12 @@ def update_region_code_coordinates(
                     service_coordinates=service_coordinates,
                 )
             else:
-                try:
-                    coordinates = _get_coordinates_from_opencage(
-                        country_and_region_code=country_and_region_code,
-                        opencage_client=opencage_client,
-                        opencage_failures=opencage_failures,
-                    )
-                except opencage.geocoder.RateLimitExceededError:
-                    warnings.warn(
-                        message=(
-                            "OpenCage API request quota exceeded. Halting the coordinates update early; "
-                            "progress so far is saved and remaining region codes will be retried on the next run."
-                        ),
-                        category=RuntimeWarning,
-                        stacklevel=2,
-                    )
-                    break
+                coordinates = get_region_coordinates(country_and_region_code)
 
             if coordinates is not None:
                 region_codes_to_coordinates[country_and_region_code] = coordinates
+            else:
+                unresolved_region_codes.append(country_and_region_code)
     finally:
         if geolite2_reader is not None:
             geolite2_reader.close()
@@ -127,10 +105,10 @@ def update_region_code_coordinates(
     with service_coordinates_file_path.open(mode="w") as file_stream:
         yaml.dump(data=service_coordinates, stream=file_stream)
 
-    if any(opencage_failures):
+    if any(unresolved_region_codes):
         message = (
-            f"\nThe following region codes could not be resolved using the OpenCage API:\n"
-            f"{', '.join(opencage_failures)}\n\n"
+            f"\nThe following region codes have no known coordinates:\n"
+            f"{', '.join(natsort.natsorted(unresolved_region_codes))}\n\n"
         )
         print(message)
 
@@ -166,67 +144,5 @@ def _get_service_coordinates_from_geolite2(
 
     coordinates = {"latitude": location.latitude, "longitude": location.longitude}
     service_coordinates[country_and_region_code] = coordinates
-
-    return coordinates
-
-
-def _get_opencage_query(country_and_region_code: str, /) -> tuple[str, str | None]:
-    """
-    Translate a ``"US/CA"`` label into a geocoding query and a country restriction for OpenCage.
-
-    The ISO codes are expanded into names (``"California, United States"``) so that the geocoder is not left to
-    guess what a two-letter code means, and the query is restricted to the country so that a subdivision whose
-    name also exists elsewhere cannot be matched abroad. Codes the ISO tables do not know are passed through as-is.
-
-    Returns
-    -------
-    query : str
-        The free-text query to geocode.
-    country_code : str | None
-        The lower-case ISO 3166-1 alpha-2 code to restrict the search to, or ``None`` if the country is unknown.
-    """
-    import pycountry
-
-    country_code, _, subdivision_code = country_and_region_code.partition("/")
-
-    try:
-        country = pycountry.countries.get(alpha_2=country_code)
-    except KeyError:  # pragma: no cover
-        country = None
-    if country is None:
-        return country_and_region_code, None
-
-    if not subdivision_code:
-        return country.name, country_code.lower()
-
-    try:
-        subdivision = pycountry.subdivisions.get(code=f"{country_code}-{subdivision_code}")
-    except KeyError:  # pragma: no cover
-        subdivision = None
-    subdivision_name = subdivision.name if subdivision is not None else subdivision_code
-
-    return f"{subdivision_name}, {country.name}", country_code.lower()
-
-
-def _get_coordinates_from_opencage(
-    *, country_and_region_code: str, opencage_client: "opencage.geocoder.OpenCageGeocode", opencage_failures: list[str]
-) -> dict[str, float] | None:
-    """
-    Use the OpenCage API to get the coordinates (in decimal degrees form) for a ISO 3166 country/region code.
-
-    Note that multiple results might be returned by the query, and some may not correctly correspond to the country.
-    Also note that the order of latitude and longitude are reversed in the response, which is corrected in this output.
-    """
-    query, country_code = _get_opencage_query(country_and_region_code)
-    query_parameters = {"countrycode": country_code} if country_code is not None else {}
-    results = opencage_client.geocode(query, **query_parameters)
-
-    if not any(results):
-        opencage_failures.append(country_and_region_code)
-        return None
-
-    latitude = results[0]["geometry"]["lat"]
-    longitude = results[0]["geometry"]["lng"]
-    coordinates = {"latitude": latitude, "longitude": longitude}
 
     return coordinates
