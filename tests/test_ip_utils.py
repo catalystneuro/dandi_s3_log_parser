@@ -446,6 +446,28 @@ def test_update_geolite2_database_downloads_and_extracts(
 
 
 @pytest.mark.ai_generated
+def test_update_geolite2_database_reports_maxmind_rejection(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected download surfaces MaxMind's own explanation alongside the HTTP status."""
+    import requests
+
+    monkeypatch.setenv("MAXMIND_ACCOUNT_ID", "123456")
+    monkeypatch.setenv("MAXMIND_LICENSE_KEY", "test-license-key")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.__enter__.return_value = mock_response
+    mock_response.text = '{"code":"AUTHORIZATION_INVALID","error":"A valid license key is required."}'
+    mock_response.raise_for_status.side_effect = requests.HTTPError("401 Client Error: Unauthorized for url: x")
+
+    with unittest.mock.patch("requests.get", return_value=mock_response):
+        with pytest.raises(requests.HTTPError, match=r"401 Client Error.*\nMaxMind said: .*AUTHORIZATION_INVALID"):
+            update_geolite2_database(cache_directory=tmp_path)
+
+    assert not (tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME).exists()
+
+
+@pytest.mark.ai_generated
 def test_update_geolite2_database_force_redownloads_fresh_copy(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
