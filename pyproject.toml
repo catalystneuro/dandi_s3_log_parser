@@ -12,7 +12,7 @@ packages = ["src/s3_log_extraction"]
 
 [project]
 name = "s3-log-extraction"
-version="1.10.12"
+version="1.11.0"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
@@ -54,8 +54,10 @@ classifiers = [
 
 [project.optional-dependencies]
 geolocation = [
-    "ipinfo",
+    "geoip2",
     "opencage",
+    "pycountry",
+    "requests",
 ]
 remote = [
     "fsspec",

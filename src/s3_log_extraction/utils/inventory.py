@@ -77,9 +77,9 @@ class IpStats(typing.TypedDict):
     missing : IpCategoryCount
         IPs in the ``ip_to_region`` cache with no region resolved (``None``).
     unknown : IpCategoryCount
-        IPs where the lookup returned an unexpected error (``"unknown"``).
+        IPs where the lookup returned an unexpected error (``"unknown"``; legacy label).
     undetermined : IpCategoryCount
-        IPs where the lookup hit API quota limits (``"undetermined"``).
+        IPs where the lookup hit API quota limits (``"undetermined"``; legacy label from the IPInfo era).
     bogon : IpCategoryCount
         IPs flagged as bogon (private / reserved address space).
     vpn : IpCategoryCount
@@ -113,10 +113,11 @@ def get_ip_stats(
     compares that against the number of entries in ``ip_to_region.yaml``.  Also
     bins every classified entry into one of these mutually-exclusive categories:
 
-    * **determined** – a real geographic region string (e.g. ``"US/California"``).
+    * **determined** – a real geographic region string (e.g. ``"US/CA"``).
     * **missing** – the cache entry is ``None`` (no region could be resolved).
-    * **unknown** – the lookup returned an unexpected error (``"unknown"``).
-    * **undetermined** – the lookup hit API quota limits (``"undetermined"``).
+    * **unknown** – the lookup returned an unexpected error (``"unknown"``; legacy label).
+    * **undetermined** – the lookup hit API quota limits (``"undetermined"``; legacy label from the
+      IPInfo era, no longer produced now that geolocation uses the local GeoLite2 database).
     * **bogon** – the IP is in private / reserved address space (``"bogon"``).
     * **vpn** – the IP matches a known VPN / datacenter CIDR (starts with ``"VPN"``).
     * **cloud_service** – the IP belongs to an AWS or GCP CIDR range.

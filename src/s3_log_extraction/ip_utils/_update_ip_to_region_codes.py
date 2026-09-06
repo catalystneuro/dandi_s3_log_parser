@@ -1,13 +1,13 @@
+import ipaddress
 import itertools
 import math
-import os
 import pathlib
 import random
 import typing
-import warnings
 
 import tqdm
 
+from ._geolite2 import open_geolite2_database
 from ._globals import _KNOWN_SERVICES
 from ._ip_cache import load_ip_cache, write_ip_cache
 from ._ip_utils import _get_cidr_address_ranges_and_subregions, _ip_in_cidr, _read_ips_from_file
@@ -23,10 +23,14 @@ def update_ip_to_region_codes(
     """
     Update the ``ip_to_region.yaml`` file in the cache directory.
 
+    Every IP address found in the extraction cache that is not yet in ``ip_to_region.yaml`` is first checked
+    against the CIDR ranges of known cloud services and VPNs, and otherwise geolocated with the local GeoLite2-City
+    database (downloaded on demand; see ``update_geolite2_database``).
+
     Parameters
     ----------
     batch_size : int
-        Number of IP addresses to process in each batch.
+        Number of IP addresses to process between writes of the cache file.
         Default is 1,000.
     batch_limit : int | None
         Maximum number of batches to process.
@@ -39,14 +43,6 @@ def update_ip_to_region_codes(
         If ``True`` (default), IP data files are decrypted when reading and encrypted when writing.
         If ``False``, IP data files are read and written as plaintext.
     """
-    import ipinfo
-
-    ipinfo_api_key = os.environ.get("IPINFO_API_KEY", None)
-    if ipinfo_api_key is None:
-        message = "The environment variable 'IPINFO_API_KEY' must be set to import `s3_log_extraction`!"
-        raise ValueError(message)  # pragma: no cover
-    ipinfo_handler = ipinfo.getHandler(access_token=ipinfo_api_key)
-
     cache_dir = pathlib.Path(cache_directory) if cache_directory is not None else get_cache_directory()
     extraction_directory = cache_dir / "extraction"
     extraction_directory.mkdir(exist_ok=True)
@@ -62,8 +58,10 @@ def update_ip_to_region_codes(
     ip_to_region = load_ip_cache(
         cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
     )
-    # Skip IPs already in the cache (including "undetermined"); use the refresh command to retry those
+    # Skip IPs already in the cache; use the refresh command to re-check those
     ips_to_update = list(all_ips - set(ip_to_region.keys()))
+    if not ips_to_update:
+        return
 
     # If a batch limit is set, shuffle the IPs to ensure repeated runs update different IPs
     if batch_limit is not None:
@@ -74,37 +72,28 @@ def update_ip_to_region_codes(
         number_of_batches = min(number_of_batches, batch_limit)
         ips_to_update = ips_to_update[: batch_limit * batch_size]
 
-    for ip_batch in tqdm.tqdm(
-        iterable=itertools.batched(iterable=ips_to_update, n=batch_size),
-        total=number_of_batches,
-        desc="Fetching IP regions in batches",
-        unit="batches",
-        smoothing=0,
-        position=0,
-        leave=False,
-    ):
-        for ip_address in tqdm.tqdm(
-            iterable=ip_batch,
-            total=batch_size,
-            desc="Fetching IP regions",
-            unit=" IP addresses",
+    with open_geolite2_database(cache_directory=cache_directory) as geolite2_reader:
+        for ip_batch in tqdm.tqdm(
+            iterable=itertools.batched(iterable=ips_to_update, n=batch_size),
+            total=number_of_batches,
+            desc="Resolving IP regions in batches",
+            unit="batches",
             smoothing=0,
-            position=1,
+            position=0,
             leave=False,
         ):
-            try:
-                region_code = _get_region_code_from_ip_address(ip_address=ip_address, ipinfo_handler=ipinfo_handler)
-            except ipinfo.exceptions.RequestQuotaExceededError:
-                warnings.warn(
-                    message=(
-                        "IPInfo API request quota exceeded. Halting the update early; "
-                        "IP addresses not yet processed will be retried on the next run."
-                    ),
-                    category=RuntimeWarning,
-                    stacklevel=2,
+            for ip_address in tqdm.tqdm(
+                iterable=ip_batch,
+                total=batch_size,
+                desc="Resolving IP regions",
+                unit=" IP addresses",
+                smoothing=0,
+                position=1,
+                leave=False,
+            ):
+                ip_to_region[ip_address] = _get_region_code_from_ip_address(
+                    ip_address=ip_address, geolite2_reader=geolite2_reader
                 )
-                return
-            ip_to_region[ip_address] = region_code
 
             write_ip_cache(
                 data=ip_to_region,
@@ -116,8 +105,18 @@ def update_ip_to_region_codes(
 
 def _get_region_code_from_ip_address(
     ip_address: str,
-    ipinfo_handler: "ipinfo.Handler",
+    geolite2_reader: "geoip2.database.Reader",
 ) -> str | typing.Literal["bogon"] | None:
+    """
+    Classify an IP address as a known service (e.g. ``"AWS/us-east-1"``), a bogon, or a place.
+
+    A place is written as the ISO 3166-1 alpha-2 country code and the ISO 3166-2 subdivision code, separated by a
+    slash: ``"US/CA"`` for California, ``"GB/ENG"`` for England. The first-level subdivision is used when the
+    database knows several. Only the country code is returned when no subdivision is known, and ``None`` when
+    the address is not in the database at all.
+    """
+    import geoip2.errors
+
     # Determine if the IP address belongs to GitHub, AWS, Google, or known VPNs
     # Azure not yet easily doable; keep an eye on
     # https://learn.microsoft.com/en-us/answers/questions/1410071/up-to-date-azure-public-api-to-get-azure-ip-ranges
@@ -141,23 +140,27 @@ def _get_region_code_from_ip_address(
                 region_service_string += f"/{subregion}"
             return region_service_string
 
-    # TODO: add batching support to ipinfo requests
-    # A quota exceeded error (`ipinfo.exceptions.RequestQuotaExceededError`) propagates to the caller,
-    # which should halt further requests since none can succeed until the quota resets.
-    timeout_in_seconds = 30
-    details = ipinfo_handler.getDetails(ip_address=ip_address, timeout=timeout_in_seconds)
+    # Private, reserved, loopback, link-local, and documentation ranges are never routed publicly
+    try:
+        if not ipaddress.ip_address(address=ip_address).is_global:
+            return "bogon"
+    except ValueError:
+        return None
 
-    country = details.details.get("country", None)
-    region = details.details.get("region", None)
+    try:
+        response = geolite2_reader.city(ip_address)
+    except geoip2.errors.AddressNotFoundError:
+        return None
 
-    match (country is None, region is None):
-        case (True, True):
-            region_string = "bogon" if details.details.get("bogon", False) is True else None
-        case (True, False):
-            region_string = region
+    country_code = response.country.iso_code
+    subdivision_code = response.subdivisions[0].iso_code if len(response.subdivisions) > 0 else None
+
+    match (country_code is None, subdivision_code is None):
+        case (True, _):
+            region_string = None
         case (False, True):
-            region_string = country
+            region_string = country_code
         case (False, False):
-            region_string = f"{country}/{region}"
+            region_string = f"{country_code}/{subdivision_code}"
 
     return region_string
