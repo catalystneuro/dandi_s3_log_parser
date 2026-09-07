@@ -462,9 +462,11 @@ def test_generate_archive_summaries_accepts_custom_asset_type_order(tmpdir: py.p
         # Neither do services whose region was never reported
         ("GitHub", False),
         ("VPN", False),
+        # Nor a ``None`` entry left in the cache by earlier versions
+        (None, False),
     ],
 )
-def test_is_resolved_region(region_label: str, expected: bool) -> None:
+def test_is_resolved_region(region_label: str | None, expected: bool) -> None:
     """Only labels that name a place, which is to say the ones carrying a slash, are resolved regions."""
     from s3_log_extraction.ip_utils import is_resolved_region
 
@@ -488,13 +490,42 @@ def test_is_resolved_region(region_label: str, expected: bool) -> None:
         ("bogon", False),
         # Genuine geographic labels are not excluded
         ("US/California", False),
+        # A ``None`` entry left in the cache by earlier versions is an unresolved location, not a service
+        (None, False),
     ],
 )
-def test_is_cloud_service_or_vpn_label(region_label: str, expected: bool) -> None:
+def test_is_cloud_service_or_vpn_label(region_label: str | None, expected: bool) -> None:
     """Only genuine cloud/VPN service labels are excluded; unresolved-location labels are not."""
     from s3_log_extraction.ip_utils import is_cloud_service_or_vpn_label
 
     assert is_cloud_service_or_vpn_label(region_label) == expected
+
+
+@pytest.mark.ai_generated
+def test_summaries_tolerate_none_region_entries(tmpdir: py.path.local) -> None:
+    """A ``None`` entry in the ``ip_to_region`` cache is summarized as ``missing`` instead of crashing the run."""
+    test_dir = pathlib.Path(tmpdir)
+    asset_directory = test_dir / "extraction" / "ds001" / "asset"
+    _write_asset(
+        asset_directory=asset_directory,
+        requests=[
+            ("250101000000", _DOWNLOAD, "192.0.2.1"),
+            ("250101000001", _STREAMING, "192.0.2.2"),
+            ("250101000002", _STREAMING, "192.0.2.3"),
+        ],
+    )
+    ip_cache_directory = test_dir / "ips"
+    ip_cache_directory.mkdir(parents=True)
+    (ip_cache_directory / "ip_to_region.yaml").write_text("192.0.2.1: null\n192.0.2.2: bogon\n192.0.2.3: US/CA\n")
+
+    # A threshold of zero publishes the by-region summary as soon as one resolved region is updated
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_disclosure_threshold=0
+    )
+
+    by_region = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_region.tsv")
+    assert sorted(by_region["region"]) == ["US/CA", "bogon", "missing"]
+    assert (test_dir / "summaries" / "ds001" / "requester_count.tsv").read_text().strip() == "3"
 
 
 @pytest.mark.ai_generated
