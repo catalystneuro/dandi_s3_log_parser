@@ -1,9 +1,9 @@
-# A stand-in geolocation of the requesters in the example logs, copied into the `ips` cache subdirectory of a
-# test cache so that the summaries have resolved regions to report.
+# A stand-in geolocation of the requesters in the example logs, loaded into a `MappingRegionResolver` by the
+# `mocked_region_resolver` test fixture so that the summaries have resolved regions to report.
 #
-# Every requester of the example logs is a documentation-range address (RFC 5737), which a real geolocation
-# resolves to `bogon` rather than to any place. The regions below are invented, and are spread over enough
-# distinct places for a `by_region.tsv` to clear its disclosure threshold and be published.
+# Every requester of the example logs is a documentation-range address (RFC 5737), which a real resolution
+# labels `bogon` rather than any place. The regions below are invented, and are spread over enough distinct
+# places for a `by_region.tsv` to clear its disclosure threshold and be published.
 #
 # 203.0.113.1 is deliberately absent, so that its activity is summarized under the unresolved `missing` label
 # and cannot count toward that threshold.

@@ -1,8 +1,8 @@
 import pathlib
 
 import natsort
+import pandas
 import tqdm
-import yaml
 
 from ._geolite2 import open_geolite2_database
 from ._globals import _DEFAULT_REGION_CODES_TO_COORDINATES, _KNOWN_SERVICES
@@ -12,6 +12,17 @@ from ._region_codes import get_region_coordinates
 from ..config import get_cache_subdirectory
 
 
+def _collect_published_region_codes(*, cache_directory: str | pathlib.Path | None = None) -> set[str]:
+    """Collect every region label that appears in a published ``by_region.tsv`` summary, per dataset or archive-wide."""
+    summary_directory = get_cache_subdirectory(cache_directory=cache_directory, name="summaries")
+
+    region_codes: set[str] = set()
+    for summary_file_path in summary_directory.rglob(pattern="by_region.tsv"):
+        summary_table = pandas.read_table(filepath_or_buffer=summary_file_path, usecols=["region"])
+        region_codes.update(str(region) for region in summary_table["region"])
+    return region_codes
+
+
 def update_region_code_coordinates(
     cache_directory: str | pathlib.Path | None = None,
     use_encryption: bool = True,
@@ -19,8 +30,10 @@ def update_region_code_coordinates(
     """
     Update the `region_codes_to_coordinates.yaml` file in the cache directory.
 
-    Geographic labels (``"USA/CA"``) are looked up in the ISO 3166 coordinate tables shipped with the package, and
-    cloud service regions (``"AWS/us-east-1"``) are located with the GeoLite2 database. No web API is involved.
+    Every region label of the published ``by_region.tsv`` summaries that has no coordinates yet is located. Geographic
+    labels (``"USA/CA"``) are looked up in the ISO 3166 coordinate tables shipped with the package, and cloud service
+    regions (``"AWS/us-east-1"``) are located with the GeoLite2 database. No web API is involved, and the database is
+    only opened when a cloud service region is new.
 
     Parameters
     ----------
@@ -28,36 +41,17 @@ def update_region_code_coordinates(
         Path to the cache directory.
         If `None`, the default cache directory will be used.
     use_encryption : bool
-        If ``True`` (default), IP cache files are decrypted when reading and encrypted when writing.
-        If ``False``, IP cache files are read and written as plaintext.
+        If ``True`` (default), the coordinates file is decrypted when read and encrypted when written.
+        If ``False``, it is read and written as plaintext.
     """
-    ip_cache_directory = get_cache_subdirectory(cache_directory=cache_directory, name="ips")
-
-    ip_to_region_codes_file_path = ip_cache_directory / "ip_to_region.yaml"
-    if not ip_to_region_codes_file_path.exists():
-        message = (
-            f"\nCannot update region codes to coordinates because the IP to region file does not exist: "
-            f"{ip_to_region_codes_file_path}\n\n"
-            f"Please run `s3logextraction update ip regions` first to create the IP to region file.\n"
-        )
-        raise FileNotFoundError(message)
-
-    service_coordinates_file_path = ip_cache_directory / "service_coordinates.yaml"
-    if not service_coordinates_file_path.exists():
-        service_coordinates_file_path.touch()
-    with service_coordinates_file_path.open(mode="r") as file_stream:
-        service_coordinates = yaml.safe_load(stream=file_stream) or {}
-
     region_codes_to_coordinates: dict[str, dict[str, float]] = dict(_DEFAULT_REGION_CODES_TO_COORDINATES)
     previous_region_codes_to_coordinates = load_ip_cache(
         cache_type="region_codes_to_coordinates", cache_directory=cache_directory, use_encryption=use_encryption
     )
     region_codes_to_coordinates.update(previous_region_codes_to_coordinates)
 
-    ip_to_region = load_ip_cache(
-        cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
-    )
-    region_codes_to_update = set(ip_to_region.values()) - set(region_codes_to_coordinates.keys())
+    published_region_codes = _collect_published_region_codes(cache_directory=cache_directory)
+    region_codes_to_update = published_region_codes - set(region_codes_to_coordinates.keys())
     unresolved_region_codes = []
     geolite2_reader = None
     try:
@@ -68,18 +62,12 @@ def update_region_code_coordinates(
             smoothing=0,
             unit="regions",
         ):
-            # Unresolvable labels (and IPs without any region) do not have coordinates, so skip
-            if country_and_region_code is None or country_and_region_code == "bogon":
-                continue
-
             service_name = country_and_region_code.split("/")[0]
             if service_name in _KNOWN_SERVICES:
                 if geolite2_reader is None:
                     geolite2_reader = open_geolite2_database(cache_directory=cache_directory)
                 coordinates = _get_service_coordinates_from_geolite2(
-                    country_and_region_code=country_and_region_code,
-                    geolite2_reader=geolite2_reader,
-                    service_coordinates=service_coordinates,
+                    country_and_region_code=country_and_region_code, geolite2_reader=geolite2_reader
                 )
             else:
                 coordinates = get_region_coordinates(country_and_region_code)
@@ -102,8 +90,6 @@ def update_region_code_coordinates(
         cache_directory=cache_directory,
         use_encryption=use_encryption,
     )
-    with service_coordinates_file_path.open(mode="w") as file_stream:
-        yaml.dump(data=service_coordinates, stream=file_stream)
 
     if any(unresolved_region_codes):
         message = (
@@ -117,22 +103,22 @@ def _get_service_coordinates_from_geolite2(
     *,
     country_and_region_code: str,
     geolite2_reader: "geoip2.database.Reader",
-    service_coordinates: dict[str, dict[str, float]],
 ) -> dict[str, float] | None:
     """
     Locate a cloud service region (e.g. ``"AWS/us-east-1"``) by geolocating the first IP of one of its CIDR ranges.
 
-    Note that services with a single code (e.g., "GitHub") should be handled via the global default dictionary.
+    A service label without a region (``"GitHub"``, ``"VPN"``) names no place and is handled by the defaults.
     """
     import geoip2.errors
 
-    coordinates = service_coordinates.get(country_and_region_code, None)
-    if coordinates is not None:
-        return coordinates
+    service_name, _, subregion = country_and_region_code.partition("/")
+    if not subregion:
+        return None
 
-    service_name, subregion = country_and_region_code.split("/")
     cidr_addresses_and_subregions = _get_cidr_address_ranges_and_subregions(service_name=service_name)
     subregion_to_cidr_address = {subregion: cidr_address for cidr_address, subregion in cidr_addresses_and_subregions}
+    if subregion not in subregion_to_cidr_address:
+        return None
 
     ip_address = subregion_to_cidr_address[subregion].split("/")[0]
     try:
@@ -142,7 +128,4 @@ def _get_service_coordinates_from_geolite2(
     if location.latitude is None or location.longitude is None:
         return None
 
-    coordinates = {"latitude": location.latitude, "longitude": location.longitude}
-    service_coordinates[country_and_region_code] = coordinates
-
-    return coordinates
+    return {"latitude": location.latitude, "longitude": location.longitude}

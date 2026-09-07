@@ -5,13 +5,14 @@ import gzip
 import io
 import json
 import pathlib
+from unittest.mock import patch
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 import s3_log_extraction._command_line_interface._cli as cli_module
 from s3_log_extraction._command_line_interface._cli import s3logextraction_cli
+from s3_log_extraction.ip_utils import MappingRegionResolver
 from s3_log_extraction.utils.inventory import get_extraction_completion, get_ip_stats, get_log_bucket_stats
 
 
@@ -309,7 +310,6 @@ def test_completion_cli(
     [
         pytest.param(["stop"], "stop_extraction", id="stop"),
         pytest.param(["reset", "extraction"], "reset_extraction", id="reset_extraction"),
-        pytest.param(["update", "ip", "regions"], "update_ip_to_region_codes", id="update_ip_regions"),
         pytest.param(["update", "ip", "coordinates"], "update_region_code_coordinates", id="update_ip_coordinates"),
         pytest.param(["update", "summaries"], "generate_summaries", id="update_summaries"),
         pytest.param(["update", "totals"], "generate_all_dataset_totals", id="update_totals"),
@@ -410,13 +410,6 @@ def test_update_totals_archive_forwards_cache_directory(
 # ---------------------------------------------------------------------------
 
 
-def _write_plaintext_ip_cache(cache_dir: pathlib.Path, data: dict) -> None:
-    """Write a plaintext (unencrypted) ip_to_region.yaml cache file."""
-    ips_dir = cache_dir / "ips"
-    ips_dir.mkdir(parents=True, exist_ok=True)
-    (ips_dir / "ip_to_region.yaml").write_text(yaml.dump(data))
-
-
 def _write_plaintext_ips_txt(cache_dir: pathlib.Path, subpath: str, ips: list[str]) -> None:
     """Write a plaintext (unencrypted) ips.txt file at cache_dir/subpath/ips.txt."""
     target = cache_dir / subpath
@@ -427,11 +420,10 @@ def _write_plaintext_ips_txt(cache_dir: pathlib.Path, subpath: str, ips: list[st
 @pytest.mark.ai_generated
 def test_get_ip_stats_all_categories(tmp_path: pathlib.Path) -> None:
     """
-    get_ip_stats correctly bins every classification category.
+    get_ip_stats resolves every extracted IP and bins it into its classification category.
 
-    Writes plaintext ips.txt and ip_to_region cache files covering all eight
-    categories and asserts that extracted/classified counts and per-category
-    percentages are computed correctly.
+    Writes plaintext ips.txt files whose addresses resolve to every category and asserts the counts and the
+    per-category percentages of the extracted total.
     """
     all_ips = [
         "1.1.1.1",
@@ -444,67 +436,60 @@ def test_get_ip_stats_all_categories(tmp_path: pathlib.Path) -> None:
         "8.8.8.8",
         "9.9.9.9",
         "10.10.10.10",
-        "11.11.11.11",
-        "12.12.12.12",  # extracted but not yet classified
+        "11.11.11.11",  # repeated below, so it is one extracted IP
     ]
     _write_plaintext_ips_txt(tmp_path, "extraction/dataset/asset1", all_ips[:6])
-    _write_plaintext_ips_txt(tmp_path, "extraction/dataset/asset2", all_ips[6:])
+    _write_plaintext_ips_txt(tmp_path, "extraction/dataset/asset2", all_ips[6:] + ["11.11.11.11"])
 
-    ip_cache = {
-        "1.1.1.1": "US/California",  # determined
-        "2.2.2.2": "AU/New South Wales",  # determined
-        "3.3.3.3": None,  # missing
-        "4.4.4.4": "unknown",  # unknown
-        "5.5.5.5": "undetermined",  # undetermined (quota exceeded)
-        "6.6.6.6": "bogon",  # bogon
-        "7.7.7.7": "VPN",  # vpn
-        "8.8.8.8": "VPN/datacenter",  # vpn (sub-label)
-        "9.9.9.9": "AWS/us-east-1",  # cloud_service
-        "10.10.10.10": "GCP/us-central1",  # cloud_service
-        "11.11.11.11": "GitHub",  # github
-    }
-    _write_plaintext_ip_cache(tmp_path, ip_cache)
+    region_resolver = MappingRegionResolver(
+        {
+            "1.1.1.1": "USA/CA",  # determined
+            "2.2.2.2": "AUS/NSW",  # determined
+            "3.3.3.3": "AUS",  # determined (country only)
+            "4.4.4.4": "unknown",  # unknown
+            "5.5.5.5": "bogon",  # bogon
+            "6.6.6.6": "bogon",  # bogon
+            "7.7.7.7": "VPN",  # vpn
+            "8.8.8.8": "VPN/datacenter",  # vpn (sub-label)
+            "9.9.9.9": "AWS/us-east-1",  # cloud_service
+            "10.10.10.10": "GCP/us-central1",  # cloud_service
+            "11.11.11.11": "GitHub",  # github
+        }
+    )
 
-    stats = get_ip_stats(cache_directory=tmp_path, use_encryption=False)
+    stats = get_ip_stats(cache_directory=tmp_path, use_encryption=False, region_resolver=region_resolver)
 
-    assert stats["extracted_ip_count"] == 12
-    assert stats["classified_ip_count"] == 11
-    assert abs(stats["percent_classified"] - 11 / 12 * 100) < 0.01
+    assert stats["extracted_ip_count"] == 11
 
-    assert stats["determined"]["count"] == 2
-    assert stats["missing"]["count"] == 1
+    assert stats["determined"]["count"] == 3
     assert stats["unknown"]["count"] == 1
-    assert stats["undetermined"]["count"] == 1
-    assert stats["bogon"]["count"] == 1
+    assert stats["bogon"]["count"] == 2
     assert stats["vpn"]["count"] == 2
     assert stats["cloud_service"]["count"] == 2
     assert stats["github"]["count"] == 1
 
-    assert abs(stats["determined"]["percent"] - 2 / 11 * 100) < 0.01
+    assert abs(stats["determined"]["percent"] - 3 / 11 * 100) < 0.01
     assert abs(stats["cloud_service"]["percent"] - 2 / 11 * 100) < 0.01
 
 
 @pytest.mark.ai_generated
-def test_get_ip_stats_empty_cache(tmp_path: pathlib.Path) -> None:
-    """get_ip_stats returns zeros and 0.0% for an empty cache."""
-    _write_plaintext_ip_cache(tmp_path, {})
+def test_get_ip_stats_empty_extraction(tmp_path: pathlib.Path) -> None:
+    """get_ip_stats returns zeros and 0.0% for an empty extraction cache, without resolving anything."""
+    (tmp_path / "extraction").mkdir(parents=True)
 
-    stats = get_ip_stats(cache_directory=tmp_path, use_encryption=False)
+    with patch("s3_log_extraction.utils.inventory.IpRegionResolver") as mock_resolver:
+        stats = get_ip_stats(cache_directory=tmp_path, use_encryption=False)
+    mock_resolver.assert_not_called()
 
     assert stats["extracted_ip_count"] == 0
-    assert stats["classified_ip_count"] == 0
-    assert stats["percent_classified"] == 0.0
-    for key in ("determined", "missing", "unknown", "undetermined", "bogon", "vpn", "cloud_service", "github"):
+    for key in ("determined", "unknown", "bogon", "vpn", "cloud_service", "github"):
         assert stats[key]["count"] == 0  # type: ignore[literal-required]
         assert stats[key]["percent"] == 0.0  # type: ignore[literal-required]
 
 
 @pytest.mark.ai_generated
-def test_get_ip_stats_missing_cache_file(tmp_path: pathlib.Path) -> None:
-    """get_ip_stats returns zeros when the cache file does not exist yet."""
-    (tmp_path / "ips").mkdir(parents=True)  # dir exists but no yaml file
-
+def test_get_ip_stats_missing_extraction_directory(tmp_path: pathlib.Path) -> None:
+    """get_ip_stats returns zeros when nothing has been extracted yet."""
     stats = get_ip_stats(cache_directory=tmp_path, use_encryption=False)
 
     assert stats["extracted_ip_count"] == 0
-    assert stats["classified_ip_count"] == 0

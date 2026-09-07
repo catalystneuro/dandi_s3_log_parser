@@ -5,14 +5,15 @@ EXCLUDED_REGION_LABELS = frozenset(["VPN", "GitHub", "unknown", "undetermined", 
 
 def is_cloud_service_or_vpn_label(region_label: str | None, /) -> bool:
     """
-    Determine whether a region/service label (as produced by ``ip_to_region``) refers to a
+    Determine whether a region/service label (as produced by a region resolver) refers to a
     known cloud service or VPN provider (e.g. ``"GitHub"``, ``"AWS/us-east-1"``, ``"GCP/us-central1"``,
     ``"VPN"``) rather than a genuine geographic requester location.
 
     Note that unresolved labels such as ``"unknown"``, ``"undetermined"``, ``"missing"``, or ``"bogon"``
     are NOT considered cloud service or VPN labels here; they simply mean the requester's location could
     not be determined, not that the requester is known cloud/VPN infrastructure. A ``None`` label, as
-    written by earlier versions for an address that could not be geolocated, is treated the same way.
+    found in summaries written by earlier versions for an address that could not be geolocated, is treated
+    the same way.
     """
     if region_label is None:
         return False
@@ -23,7 +24,7 @@ def is_cloud_service_or_vpn_label(region_label: str | None, /) -> bool:
 
 def is_resolved_region(region_label: str | None, /) -> bool:
     """
-    Determine whether a region/service label (as produced by ``ip_to_region``) names an actual place.
+    Determine whether a region/service label (as produced by a region resolver) names an actual place.
 
     A resolved label always pairs a top-level code with a subdivision of it, written as ``"USA/CA"``
     (ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code) for a geographic location or as
@@ -31,8 +32,8 @@ def is_resolved_region(region_label: str | None, /) -> bool:
 
     Labels without a slash name no location. Some of them are unresolved outcomes of geolocation
     (``"unknown"``, ``"undetermined"``, ``"missing"``, ``"bogon"``) and others are services whose region
-    was never reported (``"GitHub"``, ``"VPN"``). A ``None`` label, as written by earlier versions for an
-    address that could not be geolocated, is unresolved as well.
+    was never reported (``"GitHub"``, ``"VPN"``). A ``None`` label, as found in summaries written by earlier
+    versions for an address that could not be geolocated, is unresolved as well.
     """
     return region_label is not None and "/" in region_label
 

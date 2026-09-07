@@ -9,11 +9,11 @@ from ..utils.encryption import read_text_from_file, write_text_to_file
 
 def load_ip_cache(
     *,
-    cache_type: typing.Literal["ip_to_region", "region_codes_to_coordinates"],
+    cache_type: typing.Literal["region_codes_to_coordinates"],
     cache_directory: str | pathlib.Path | None = None,
     use_encryption: bool = True,
 ) -> dict[str, str]:
-    """Load the IP cache from the cache directory.
+    """Load an IP cache file from the ``ips`` subdirectory of the cache directory.
 
     Parameters
     ----------
@@ -40,7 +40,7 @@ def load_ip_cache(
 def write_ip_cache(
     *,
     data: dict,
-    cache_type: typing.Literal["ip_to_region", "region_codes_to_coordinates"],
+    cache_type: typing.Literal["region_codes_to_coordinates"],
     cache_directory: str | pathlib.Path | None = None,
     use_encryption: bool = True,
 ) -> None:
