@@ -277,7 +277,7 @@ def test_get_region_code_address_not_in_database() -> None:
 def test_update_ip_to_region_codes_migrates_none_entries(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``None`` entries left by earlier versions are rewritten as ``"unknown"`` even when nothing new needs resolving."""
+    """``None`` entries left by earlier versions are rewritten as ``"unknown"`` even with nothing new to resolve."""
     extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
     extraction_dir.mkdir(parents=True)
     (extraction_dir / "ips.txt").write_text("192.0.2.1\n192.0.2.2\n")
