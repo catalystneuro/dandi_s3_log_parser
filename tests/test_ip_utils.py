@@ -221,8 +221,8 @@ def test_refresh_ip_to_region_codes_empty_cache(tmpdir: py.path.local, monkeypat
         ("GB", ("ENG", "WSM"), "GBR/ENG"),  # The first-level subdivision is used, not the most specific
         ("US", (), "USA"),
         ("XK", ("01",), "XK/01"),  # Kosovo has no ISO 3166-1 alpha-3 code, so the alpha-2 code is kept
-        (None, ("CA",), None),
-        (None, (), None),
+        (None, ("CA",), "unknown"),
+        (None, (), "unknown"),
     ],
 )
 def test_get_region_code_from_geolite2_response(
@@ -250,7 +250,7 @@ def test_get_region_code_from_geolite2_response(
         ("192.0.2.1", "bogon"),  # RFC 5737 documentation range
         ("10.0.0.1", "bogon"),  # Private
         ("127.0.0.1", "bogon"),  # Loopback
-        ("not-an-ip", None),
+        ("not-an-ip", "unknown"),
     ],
 )
 def test_get_region_code_skips_database_for_non_global_addresses(ip_address: str, expected_region: str | None) -> None:
@@ -269,7 +269,7 @@ def test_get_region_code_skips_database_for_non_global_addresses(ip_address: str
 
 @pytest.mark.ai_generated
 def test_get_region_code_address_not_in_database() -> None:
-    """A public address the database does not know is left unresolved rather than raising."""
+    """A public address the database does not know is labeled unknown, never ``None``, rather than raising."""
     test_ip = "8.8.8.8"
     reader = _make_reader(city_responses={test_ip: geoip2.errors.AddressNotFoundError("not found")})
 
@@ -279,7 +279,29 @@ def test_get_region_code_address_not_in_database() -> None:
     ):
         region = _get_region_code_from_ip_address(ip_address=test_ip, geolite2_reader=reader)
 
-    assert region is None
+    assert region == "unknown"
+
+
+@pytest.mark.ai_generated
+def test_update_ip_to_region_codes_migrates_none_entries(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``None`` entries left by earlier versions are rewritten as ``"unknown"`` even with nothing new to resolve."""
+    extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
+    extraction_dir.mkdir(parents=True)
+    (extraction_dir / "ips.txt").write_text("192.0.2.1\n192.0.2.2\n")
+    ip_cache_dir = tmp_path / "ips"
+    ip_cache_dir.mkdir(parents=True)
+    (ip_cache_dir / "ip_to_region.yaml").write_text("192.0.2.1: null\n192.0.2.2: bogon\n")
+
+    monkeypatch.delenv("MAXMIND_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("MAXMIND_LICENSE_KEY", raising=False)
+
+    # Every IP is already cached, so the database is never opened and no credentials are needed
+    s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
+
+    ip_to_region = yaml.safe_load((ip_cache_dir / "ip_to_region.yaml").read_text())
+    assert ip_to_region == {"192.0.2.1": "unknown", "192.0.2.2": "bogon"}
 
 
 @pytest.mark.ai_generated

@@ -269,7 +269,7 @@ def _collect_unique_ips(
         if not full_ips_file_path.exists():
             continue
         ips = _read_ips_from_file(file_path=full_ips_file_path, use_encryption=use_encryption)
-        unique_ips.update(ip for ip in ips if not is_cloud_service_or_vpn_label(ip_to_region.get(ip, "")))
+        unique_ips.update(ip for ip in ips if not is_cloud_service_or_vpn_label(ip_to_region.get(ip) or ""))
     return unique_ips
 
 
@@ -567,7 +567,9 @@ def _summarize_dataset_by_region(
     number_of_views_by_region = collections.defaultdict(int)
     for asset_directory in asset_directories:
         for _, view_ip in views_by_asset_directory.get(asset_directory, []):
-            number_of_views_by_region[ip_to_region.get(view_ip, "missing")] += 1
+            # A ``None`` entry, as written by earlier versions for an address that could not be geolocated,
+            # names no place any more than an absent one does
+            number_of_views_by_region[ip_to_region.get(view_ip) or "missing"] += 1
 
         # TODO: Could add a step here to track which object IDs have been processed, and if encountered again
         # Just copy the file over instead of reprocessing
@@ -577,7 +579,7 @@ def _summarize_dataset_by_region(
             continue
 
         full_ips = _read_ips_from_file(file_path=full_ips_file_path, use_encryption=use_encryption)
-        regions = [ip_to_region.get(ip, "missing") for ip in full_ips]
+        regions = [ip_to_region.get(ip) or "missing" for ip in full_ips]
         all_regions.extend(regions)
 
         bytes_sent_file_path = asset_directory / "bytes_sent.txt"

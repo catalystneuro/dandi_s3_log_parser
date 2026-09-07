@@ -59,9 +59,22 @@ def update_ip_to_region_codes(
     ip_to_region = load_ip_cache(
         cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
     )
+    # Earlier versions wrote ``None`` for an address that could not be geolocated, which the summaries cannot
+    # handle; carry such entries forward under the ``"unknown"`` label so that the cache stays all strings
+    unresolved_ips = [ip_address for ip_address, region in ip_to_region.items() if region is None]
+    for ip_address in unresolved_ips:
+        ip_to_region[ip_address] = "unknown"
+
     # Skip IPs already in the cache; use the refresh command to re-check those
     ips_to_update = list(all_ips - set(ip_to_region.keys()))
     if not ips_to_update:
+        if unresolved_ips:
+            write_ip_cache(
+                data=ip_to_region,
+                cache_type="ip_to_region",
+                cache_directory=cache_directory,
+                use_encryption=use_encryption,
+            )
         return
 
     # If a batch limit is set, shuffle the IPs to ensure repeated runs update different IPs
@@ -107,14 +120,15 @@ def update_ip_to_region_codes(
 def _get_region_code_from_ip_address(
     ip_address: str,
     geolite2_reader: "geoip2.database.Reader",
-) -> str | typing.Literal["bogon"] | None:
+) -> str | typing.Literal["bogon", "unknown"]:
     """
-    Classify an IP address as a known service (e.g. ``"AWS/us-east-1"``), a bogon, or a place.
+    Classify an IP address as a known service (e.g. ``"AWS/us-east-1"``), a bogon, a place, or unknown.
 
     A place is written as the ISO 3166-1 alpha-3 country code and the ISO 3166-2 subdivision code, separated by a
     slash: ``"USA/CA"`` for California, ``"GBR/ENG"`` for England. The first-level subdivision is used when the
-    database knows several. Only the country code is returned when no subdivision is known, and ``None`` when
-    the address is not in the database at all.
+    database knows several. Only the country code is returned when no subdivision is known. The label is
+    ``"unknown"`` when the address is malformed, is not in the database at all, or has no country there; it is
+    never ``None``, since every label must survive string handling in the summaries.
     """
     import geoip2.errors
 
@@ -146,19 +160,19 @@ def _get_region_code_from_ip_address(
         if not ipaddress.ip_address(address=ip_address).is_global:
             return "bogon"
     except ValueError:
-        return None
+        return "unknown"
 
     try:
         response = geolite2_reader.city(ip_address)
     except geoip2.errors.AddressNotFoundError:
-        return None
+        return "unknown"
 
     country_alpha_2 = response.country.iso_code
     subdivision_code = response.subdivisions[0].iso_code if len(response.subdivisions) > 0 else None
 
     match (country_alpha_2 is None, subdivision_code is None):
         case (True, _):
-            region_string = None
+            region_string = "unknown"
         case (False, True):
             region_string = country_alpha_2_to_alpha_3(country_alpha_2)
         case (False, False):
