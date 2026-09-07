@@ -1,13 +1,20 @@
-_KNOWN_SERVICES = ("GitHub", "AWS", "GCP", "VPN")  # Azure has problems; see _ip_utils.py for more info
+# Azure has problems; see _ip_utils.py for more info.
+# "GH-actions" is matched before "GitHub" so that GitHub Actions runner ranges resolve to their own
+# label rather than the broader "GitHub" one; see the split in _ip_utils.py.
+_KNOWN_SERVICES = ("GH-actions", "GitHub", "AWS", "GCP", "VPN")
 
-EXCLUDED_REGION_LABELS = frozenset(["VPN", "GitHub", "unknown", "undetermined", "missing", "bogon"])
+# The label under which GitHub Actions runner ranges are recorded. Kept as a single source of truth so
+# the taxonomy (_ip_utils.py), the predicates below, and the view exclusion all agree on the spelling.
+GITHUB_ACTIONS_LABEL = "GH-actions"
+
+EXCLUDED_REGION_LABELS = frozenset(["VPN", "GitHub", "GH-actions", "unknown", "undetermined", "missing", "bogon"])
 
 
 def is_cloud_service_or_vpn_label(region_label: str, /) -> bool:
     """
     Determine whether a region/service label (as produced by ``ip_to_region``) refers to a
-    known cloud service or VPN provider (e.g. ``"GitHub"``, ``"AWS/us-east-1"``, ``"GCP/us-central1"``,
-    ``"VPN"``) rather than a genuine geographic requester location.
+    known cloud service or VPN provider (e.g. ``"GitHub"``, ``"GH-actions"``, ``"AWS/us-east-1"``,
+    ``"GCP/us-central1"``, ``"VPN"``) rather than a genuine geographic requester location.
 
     Note that unresolved labels such as ``"unknown"``, ``"undetermined"``, ``"missing"``, or ``"bogon"``
     are NOT considered cloud service or VPN labels here; they simply mean the requester's location could
@@ -16,6 +23,19 @@ def is_cloud_service_or_vpn_label(region_label: str, /) -> bool:
     return any(
         region_label == service_name or region_label.startswith(f"{service_name}/") for service_name in _KNOWN_SERVICES
     )
+
+
+def is_github_actions_label(region_label: str, /) -> bool:
+    """
+    Determine whether a region/service label (as produced by ``ip_to_region``) refers to a GitHub Actions
+    runner range.
+
+    This is the automated-CI subset of the broader ``"GitHub"`` label: it is unambiguously continuous
+    integration traffic, whereas the remaining GitHub ranges (Codespaces, the web/API, etc.) can carry
+    genuine interactive use such as a human streaming a file from a notebook in a Codespace. Views are
+    excluded on this narrow label only, so those legitimate GitHub-hosted requesters are still counted.
+    """
+    return region_label == GITHUB_ACTIONS_LABEL or region_label.startswith(f"{GITHUB_ACTIONS_LABEL}/")
 
 
 def is_resolved_region(region_label: str, /) -> bool:

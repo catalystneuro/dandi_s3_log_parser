@@ -477,6 +477,7 @@ def test_is_resolved_region(region_label: str, expected: bool) -> None:
     [
         # Genuine known cloud service / VPN labels are excluded
         ("GitHub", True),
+        ("GH-actions", True),
         ("VPN", True),
         ("AWS/us-east-1", True),
         ("GCP/us-central1", True),
@@ -495,6 +496,28 @@ def test_is_cloud_service_or_vpn_label(region_label: str, expected: bool) -> Non
     from s3_log_extraction.ip_utils import is_cloud_service_or_vpn_label
 
     assert is_cloud_service_or_vpn_label(region_label) == expected
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("region_label", "expected"),
+    [
+        # The GitHub Actions runner label is the narrow automated-CI subset
+        ("GH-actions", True),
+        # The broader GitHub label is NOT Actions: it can carry interactive use (Codespaces, web/API)
+        ("GitHub", False),
+        # Other cloud/VPN and geographic labels are not GitHub Actions
+        ("AWS/us-east-1", False),
+        ("VPN", False),
+        ("US/California", False),
+        ("missing", False),
+    ],
+)
+def test_is_github_actions_label(region_label: str, expected: bool) -> None:
+    """Only the GitHub Actions runner label is flagged; the broader GitHub label is not."""
+    from s3_log_extraction.ip_utils import is_github_actions_label
+
+    assert is_github_actions_label(region_label) == expected
 
 
 @pytest.mark.ai_generated
@@ -692,6 +715,34 @@ def test_collect_asset_views_raises_on_misaligned_files(tmpdir: py.path.local) -
 
     with pytest.raises(RuntimeError, match="are not line-aligned"):
         _collect_asset_views(asset_directory=asset_directory, use_encryption=False)
+
+
+@pytest.mark.ai_generated
+def test_collect_asset_views_excludes_github_actions(tmpdir: py.path.local) -> None:
+    """Views from GitHub Actions runners are dropped, but other GitHub-hosted requesters are kept."""
+    from s3_log_extraction.summarize._generate_summaries import _collect_asset_views
+
+    asset_directory = pathlib.Path(tmpdir) / "asset"
+    _write_asset(
+        asset_directory=asset_directory,
+        requests=[
+            ("250101000000", _STREAMING, "192.0.2.0"),  # genuine geographic requester
+            ("250101000000", _STREAMING, "198.51.100.0"),  # GitHub Actions runner (excluded)
+            ("250101000000", _STREAMING, "203.0.113.0"),  # other GitHub range, e.g. Codespaces (kept)
+        ],
+    )
+    ip_to_region = {
+        "192.0.2.0": "US/California",
+        "198.51.100.0": "GH-actions",
+        "203.0.113.0": "GitHub",
+    }
+
+    # Without the mapping, every IP is counted (the default, exclusion-free behavior)
+    assert len(_collect_asset_views(asset_directory=asset_directory, use_encryption=False)) == 3
+
+    # With the mapping, only the GitHub Actions view is dropped; the Codespaces-style GitHub view remains
+    views = _collect_asset_views(asset_directory=asset_directory, use_encryption=False, ip_to_region=ip_to_region)
+    assert sorted(ip for _, ip in views) == ["192.0.2.0", "203.0.113.0"]
 
 
 @pytest.mark.ai_generated

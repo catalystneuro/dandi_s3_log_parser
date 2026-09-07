@@ -60,7 +60,7 @@ def _request_cidr_range(service_name: str) -> dict:
     import requests
 
     match service_name:
-        case "GitHub":
+        case "GitHub" | "GH-actions":
             github_cidr_request = requests.get(url="https://api.github.com/meta").json()
 
             return github_cidr_request
@@ -93,9 +93,25 @@ def _request_cidr_range(service_name: str) -> dict:
 def _get_cidr_address_ranges_and_subregions(*, service_name: str) -> list[tuple[str, str | None]]:
     cidr_request = _request_cidr_range(service_name=service_name)
     match service_name:
+        case "GH-actions":
+            # GitHub Actions runner ranges only, split out of the broader "GitHub" service so that
+            # unambiguous CI traffic can be excluded from view counts on its own narrow label.
+            action_keys = [key for key in cidr_request.keys() if key.startswith("actions")]
+            github_actions_cidr_addresses_and_subregions = [
+                (cidr_address, None)
+                for key in action_keys
+                for cidr_address in cidr_request[key]
+                if "::" not in cidr_address
+                # Skip IPv6
+            ]
+
+            return github_actions_cidr_addresses_and_subregions
         case "GitHub":
+            # Everything GitHub except the Actions runner ranges (handled by the "GH-actions" service)
+            # and the non-address metadata keys.
             skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
-            keys = set(cidr_request.keys()) - set(skip_keys)
+            action_keys = [key for key in cidr_request.keys() if key.startswith("actions")]
+            keys = set(cidr_request.keys()) - set(skip_keys) - set(action_keys)
             github_cidr_addresses_and_subregions = [
                 (cidr_address, None)
                 for key in keys
