@@ -12,7 +12,11 @@ joining structural-complexity metrics, asset size, and web-access counts across
 ~4,500 valid NWB files — that normalizing view counts by file size, group/dataset
 count, or a tree-balance index would not be *fair*: those quantities either
 do not predict genuine interest at all, or predict only the mechanical volume of
-requests that the session definition is specifically designed to absorb.
+requests that the session definition is specifically designed to absorb. Finally, we
+show that ~24 % of raw views come from cloud/CI infrastructure (GitHub ~18 %) with no
+clean behavioral separator, and that a *bot-clean* view count is best obtained by
+excluding automated traffic by IP provenance — specifically the GitHub Actions
+ranges — rather than by any per-viewer behavioral heuristic.
 
 ---
 
@@ -91,6 +95,62 @@ concentrate on a handful of blobs — and are excluded up front (see
 `analysis/testing_blobs.txt`). Excluding them tightened the within-session tail
 (99th percentile 149 s → 18 s) and removed a spurious ~1-hour spike, revealing the
 clean 5–9 h valley described above.
+
+### 2.1.1 A bot-clean view count: exclude by provenance, not behavior
+
+The boundary-analysis exclusion above (§2.1) removes a handful of clockwork-polled
+testing blobs so they do not distort the *8-hour valley*. That is a different, and
+much smaller, problem than removing automated traffic from the *published view
+count*. Measuring the latter over the whole extraction cache (653,474 assets;
+`analysis/measure_view_exclusion_impact.py`, which reuses the production sessionizer
+verbatim) shows the contamination is large:
+
+| | views | share of total |
+|---|--:|--:|
+| total (sessions, all IPs) | 11,871,226 | 100 % |
+| from cloud/VPN/CI IP ranges | 2,820,776 | **23.76 %** |
+| — GitHub | 2,086,087 | 17.57 % |
+| — AWS | 567,608 | 4.78 % |
+| — VPN | 122,247 | 1.03 % |
+| — GCP | 44,834 | 0.38 % |
+
+Roughly **one in four raw "views" originates from cloud or CI infrastructure, and
+GitHub alone is ~18 %.** The effect is wildly uneven by storage type: **67 % of Zarr
+views** come from these ranges versus 23.5 % for HDF5 blobs — Zarr assets are
+accessed overwhelmingly by automated monitoring.
+
+**Why the exclusion is by IP origin and not by behavior.** There is no clean
+behavioral separator for this bot population. Per-viewer session statistics —
+session count, inter-request-gap regularity (CV, dominant-period fraction),
+distinct-asset breadth, active span — do not cut cleanly, because the dominant bot
+here is **GitHub Actions CI**, which behaviorally resembles an engaged human: its
+traffic is *bursty and irregular* (runs fire on pushes/PRs/schedules, not on a fixed
+period, so a regularity filter catches only ~3 % of request volume and
+false-positives on legitimately periodic Zarr chunk bursts), *not low-activity*
+(request- and session-count distributions are pure heavy tails with no valley;
+`n_sessions ≥ 2` drops ~60 % of viewers while retaining 99.5 % of sessions, and a bot
+with one endless session evades it entirely), and *not narrow* (CI can touch many
+assets). The signals that actually separate automated from human traffic are not
+behavioral but **provenance**: the requester's **IP origin** (cloud/CI ranges) and
+the **asset identity** (the reserved testing dandisets). We therefore classify by
+origin rather than trying to sessionize-and-classify.
+
+**The GitHub label is not "GitHub Actions."** The coarse `GitHub` label spans the
+whole `api.github.com/meta` range set — Actions runners *and* Codespaces, the
+web/API, git, packages, and pages. Only the **Actions** ranges are unambiguously CI;
+the rest can carry genuine interactive use — a human streaming a file from a notebook
+in a Codespace is exactly the engaged view we want to keep. Excluding all of GitHub
+would discard those. The shipped definition therefore splits the meta ranges into two
+labels — `GH-actions` (the `actions*` keys) and `GitHub` (everything else) — and
+**excludes only `GH-actions` from `number_of_views`**, counting non-Actions GitHub
+traffic as legitimate. The unique-requester count is unaffected: it continues to
+exclude all cloud/VPN/CI ranges, as before.
+
+*Status.* The 23.76 % figure and its GitHub/AWS/VPN/GCP split are measured under the
+IP→region labeling in place at the time of writing, where GitHub is still one flat
+label. A separate change to that labeling is pending; the post-exclusion
+`number_of_views` and the `GH-actions`-vs-rest split will be re-measured once it
+lands, rather than re-run against soon-to-change labels.
 
 ### 2.2 What the logs can (and cannot) tell us about access method
 
@@ -256,7 +316,12 @@ normalized away.
    mechanical request-inflation effect that the session definition already
    removes. Any such normalizer would either add noise (complexity) or
    double-correct (size).
-3. **Monitor the guard-band ambiguity** (fraction of same-IP gaps within ±10 % of
+3. **Exclude automated CI traffic from view counts by IP provenance, not behavior.**
+   About 23.8 % of raw views originate from cloud/VPN/CI ranges (GitHub ~18 %), with
+   no clean behavioral separator (§2.1.1). Key the exclusion on the narrow
+   `GH-actions` label — unambiguous CI — so that genuine interactive use from other
+   GitHub-hosted ranges (e.g. Codespaces) is still counted.
+4. **Monitor the guard-band ambiguity** (fraction of same-IP gaps within ±10 % of
    8 h) over time as a health check on the definition, and keep the bot-exclusion
    list current.
 
@@ -267,6 +332,11 @@ normalized away.
 - **Sessionization** — `analysis/assess_streaming_sessions.py` computes
   inter-request intervals per IP over the extraction cache, the minimum-density
   valley, the guard-band ambiguity sweep, and per-candidate bot attribution.
+- **View-exclusion impact** — `analysis/measure_view_exclusion_impact.py` walks the
+  whole extraction cache through the production sessionizer (`_collect_asset_views`)
+  and re-applies the production IP-origin predicate to report total vs. kept views by
+  service label, with a per-tier sensitivity table. IPs are stored only as a salted
+  keyed hash in the co-located parquet/CSV cache; the coarse region label is retained.
 - **Access vs. structure** — `analysis/access_vs_structure/build_dataset.py` joins
   the `dandi-cache` structural caches (groups, datasets, total cophenetic index,
   out-degree stats; keyed by content ID) → `content-id-to-nwb-file` →
