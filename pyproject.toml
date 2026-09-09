@@ -1,9 +1,5 @@
 [build-system]
-# hatchling>=1.32 emits Metadata-Version 2.5, which the `packaging` release bundled with
-# pypa/gh-action-pypi-publish (via twine) does not yet recognize as valid, causing PyPI
-# uploads to fail with "'2.5' is not a valid metadata version". Pin below that until the
-# publish tooling catches up.
-requires = ["hatchling<1.32", "hatch-vcs"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
