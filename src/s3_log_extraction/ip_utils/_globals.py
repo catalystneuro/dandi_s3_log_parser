@@ -25,8 +25,8 @@ def is_resolved_region(region_label: str | None, /) -> bool:
     """
     Determine whether a region/service label (as produced by ``ip_to_region``) names an actual place.
 
-    A resolved label always pairs a top-level code with a subdivision of it, written as ``"US/CA"``
-    (ISO 3166-1 alpha-2 country code and ISO 3166-2 subdivision code) for a geographic location or as
+    A resolved label always pairs a top-level code with a subdivision of it, written as ``"USA/CA"``
+    (ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code) for a geographic location or as
     ``"AWS/us-east-1"`` for a cloud service region. The slash is what makes the label resolved.
 
     Labels without a slash name no location. Some of them are unresolved outcomes of geolocation

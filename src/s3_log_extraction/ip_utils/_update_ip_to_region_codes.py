@@ -11,6 +11,7 @@ from ._geolite2 import open_geolite2_database
 from ._globals import _KNOWN_SERVICES
 from ._ip_cache import load_ip_cache, write_ip_cache
 from ._ip_utils import _get_cidr_address_ranges_and_subregions, _ip_in_cidr, _read_ips_from_file
+from ._region_codes import country_alpha_2_to_alpha_3
 from ..config import get_cache_directory
 
 
@@ -123,8 +124,8 @@ def _get_region_code_from_ip_address(
     """
     Classify an IP address as a known service (e.g. ``"AWS/us-east-1"``), a bogon, a place, or unknown.
 
-    A place is written as the ISO 3166-1 alpha-2 country code and the ISO 3166-2 subdivision code, separated by a
-    slash: ``"US/CA"`` for California, ``"GB/ENG"`` for England. The first-level subdivision is used when the
+    A place is written as the ISO 3166-1 alpha-3 country code and the ISO 3166-2 subdivision code, separated by a
+    slash: ``"USA/CA"`` for California, ``"GBR/ENG"`` for England. The first-level subdivision is used when the
     database knows several. Only the country code is returned when no subdivision is known. The label is
     ``"unknown"`` when the address is malformed, is not in the database at all, or has no country there; it is
     never ``None``, since every label must survive string handling in the summaries.
@@ -166,15 +167,15 @@ def _get_region_code_from_ip_address(
     except geoip2.errors.AddressNotFoundError:
         return "unknown"
 
-    country_code = response.country.iso_code
+    country_alpha_2 = response.country.iso_code
     subdivision_code = response.subdivisions[0].iso_code if len(response.subdivisions) > 0 else None
 
-    match (country_code is None, subdivision_code is None):
+    match (country_alpha_2 is None, subdivision_code is None):
         case (True, _):
             region_string = "unknown"
         case (False, True):
-            region_string = country_code
+            region_string = country_alpha_2_to_alpha_3(country_alpha_2)
         case (False, False):
-            region_string = f"{country_code}/{subdivision_code}"
+            region_string = f"{country_alpha_2_to_alpha_3(country_alpha_2)}/{subdivision_code}"
 
     return region_string

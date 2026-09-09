@@ -110,7 +110,13 @@ def _download_geolite2_database(*, database_path: pathlib.Path, credentials: tup
         with requests.get(
             url=GEOLITE2_DOWNLOAD_URL, auth=credentials, stream=True, timeout=timeout_in_seconds
         ) as response:
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as exception:
+                # MaxMind explains rejections in the body (wrong key, no GeoLite2 permission, EULA not accepted)
+                detail = response.text.strip()[:500]
+                message = f"{exception}" + (f"\nMaxMind said: {detail}" if detail else "")
+                raise requests.HTTPError(message, response=response) from exception
             with archive_path.open(mode="wb") as file_stream:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     file_stream.write(chunk)

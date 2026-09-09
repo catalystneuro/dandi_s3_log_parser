@@ -12,7 +12,7 @@ packages = ["src/s3_log_extraction"]
 
 [project]
 name = "s3-log-extraction"
-version="1.11.0"
+version="1.11.1"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
@@ -55,8 +55,6 @@ classifiers = [
 [project.optional-dependencies]
 geolocation = [
     "geoip2",
-    "opencage",
-    "pycountry",
     "requests",
 ]
 remote = [
@@ -139,6 +137,10 @@ known-first-party = ["s3_log_extraction"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/s3_log_extraction/_hidden_top_level_imports.py" = ["F401"]  # Must perform imports here even if not exposed
+
+
+[tool.codespell]
+skip = "*/ip_utils/_data/*"  # Three-letter ISO 3166 codes look like misspelled words
 
 
 [tool.pytest.ini_options]

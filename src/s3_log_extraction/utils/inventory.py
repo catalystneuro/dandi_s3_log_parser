@@ -113,7 +113,7 @@ def get_ip_stats(
     compares that against the number of entries in ``ip_to_region.yaml``.  Also
     bins every classified entry into one of these mutually-exclusive categories:
 
-    * **determined** – a real geographic region string (e.g. ``"US/CA"``).
+    * **determined** – a real geographic region string (e.g. ``"USA/CA"``).
     * **missing** – the cache entry is ``None`` (no region could be resolved).
     * **unknown** – the lookup returned an unexpected error (``"unknown"``; legacy label).
     * **undetermined** – the lookup hit API quota limits (``"undetermined"``; legacy label from the

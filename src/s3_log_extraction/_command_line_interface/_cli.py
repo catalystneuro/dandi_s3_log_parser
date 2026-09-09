@@ -427,7 +427,7 @@ def _update_ip_coordinates_cli(cache_directory: str | None = None, use_encryptio
     help=(
         "The number of resolved regions an update to a 'by_region.tsv' must move at once for it to be published. "
         "Below this, the summary is left as it was, so that no single requester's activity can be read off "
-        "the change. A resolved region is any label naming a physical place, such as 'US/CA'."
+        "the change. A resolved region is any label naming a physical place, such as 'USA/CA'."
     ),
     required=False,
     type=rich_click.IntRange(min=0),

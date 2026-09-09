@@ -49,7 +49,7 @@ flowchart TD
     B[Extract logs<br/><br/>Process raw S3 logs and store minimal extracted data]
     C[Update IP indexes<br/><br/>Generate anonymized indexes for each IP address]
     D[Update region codes<br/><br/>Map IPs to ISO 3166 region codes using the local GeoLite2 database]
-    E[Update coordinates<br/><br/>Convert region codes to latitude/longitude for mapping]
+    E[Update coordinates<br/><br/>Look up latitude/longitude for each region code in the bundled ISO 3166 tables]
     F[Generate summaries<br/><br/>Create per-dataset summaries for reporting]
     G[Generate totals<br/><br/>Aggregate statistics across datasets or archive]
     H[Share!<br/><br/>Post the summaries and totals in a public data repository]
@@ -99,20 +99,16 @@ After your logs are extracted, generate anonymized indexes for each IP address:
 s3logextraction update ip indexes
 ````
 
-Next, ensure some required environment variables related to external services are set:
+Next, ensure the environment variables for the geolocation database are set:
 
-1. **MAXMIND_ACCOUNT_ID** and **MAXMIND_LICENSE_KEY**
-   - Credentials of a free [MaxMind](https://www.maxmind.com/en/geolite2/signup) account, used to download the [GeoLite2-City](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) database.
-   - The database is queried locally to map each IP address to its ISO 3166 country and subdivision codes (e.g. "US/CA" for California) for anonymized statistics. IP addresses in the published ranges of GitHub, AWS, GCP, and known VPN or datacenter providers are labeled by that service instead.
-   - The database is downloaded into the cache directory on first use and refreshed automatically once it is more than a week old, so the credentials only need to be set on machines that update the region codes.
-2. **OPENCAGE_API_KEY**
-   - Access token for the [opencagedata.com](https://opencagedata.com/) service.
-   - Maps the ISO 3166 codes from the first step to latitude and longitude coordinates for the geographic heat maps used in visualizations.
+- **MAXMIND_ACCOUNT_ID** and **MAXMIND_LICENSE_KEY**
+  - Credentials of a free [MaxMind](https://www.maxmind.com/en/geolite2/signup) account, used to download the [GeoLite2-City](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) database.
+  - The database is queried locally to map each IP address to its ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code (e.g. "USA/CA" for California) for anonymized statistics. IP addresses in the published ranges of GitHub, AWS, GCP, and known VPN or datacenter providers are labeled by that service instead.
+  - The database is downloaded into the cache directory on first use and refreshed automatically once it is more than a week old, so the credentials only need to be set on machines that update the region codes.
 
 ```bash
 export MAXMIND_ACCOUNT_ID="your_account_id_here"
 export MAXMIND_LICENSE_KEY="your_license_key_here"
-export OPENCAGE_API_KEY="your_token_here"
 ```
 
 To update the region codes and their coordinates:
@@ -121,6 +117,8 @@ To update the region codes and their coordinates:
 s3logextraction update ip regions
 s3logextraction update ip coordinates
 ```
+
+The coordinates step needs no credentials: each region code is looked up in ISO 3166 tables bundled with the package, whose coordinates come from the public-domain [Natural Earth](https://www.naturalearthdata.com) dataset. Cloud service regions such as `AWS/us-east-1` are located with the GeoLite2 database.
 
 To force a fresh download of the GeoLite2 database (this happens automatically when it is stale):
 

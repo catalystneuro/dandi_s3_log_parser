@@ -273,6 +273,29 @@ def test_totals_count_regions_only_from_a_published_by_region_summary(tmpdir: py
 
 
 @pytest.mark.ai_generated
+def test_totals_count_an_aws_region_and_its_country_once(tmpdir: py.path.local) -> None:
+    """An AWS region is attributed to the alpha-3 code of its country, so it does not add a second country."""
+    test_dir = pathlib.Path(tmpdir)
+    dataset_dir = test_dir / "summaries" / "ds001"
+    dataset_dir.mkdir(parents=True)
+    (dataset_dir / "by_day.tsv").write_text(
+        "date\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\n2026-01-01\t10\t4\t3\n"
+    )
+    (dataset_dir / "by_region.tsv").write_text(
+        "region\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\n"
+        "USA/CA\t4\t2\t1\n"
+        "AWS/us-east-1\t4\t1\t1\n"
+        "DEU/BE\t2\t1\t1\n"
+    )
+
+    s3_log_extraction.summarize.generate_all_dataset_totals(cache_directory=test_dir)
+
+    totals = json.loads((test_dir / "summaries" / "totals.json").read_text())
+    assert totals["ds001"]["number_of_unique_regions"] == 3
+    assert totals["ds001"]["number_of_unique_countries"] == 2  # USA (twice) and DEU
+
+
+@pytest.mark.ai_generated
 def test_generate_archive_summaries_reports_true_counts(tmpdir: py.path.local) -> None:
     """The archive by-day summary aggregates the true values of the dataset summaries."""
     test_dir = pathlib.Path(tmpdir)
@@ -516,7 +539,7 @@ def test_summaries_tolerate_none_region_entries(tmpdir: py.path.local) -> None:
     )
     ip_cache_directory = test_dir / "ips"
     ip_cache_directory.mkdir(parents=True)
-    (ip_cache_directory / "ip_to_region.yaml").write_text("192.0.2.1: null\n192.0.2.2: bogon\n192.0.2.3: US/CA\n")
+    (ip_cache_directory / "ip_to_region.yaml").write_text("192.0.2.1: null\n192.0.2.2: bogon\n192.0.2.3: USA/CA\n")
 
     # A threshold of zero publishes the by-region summary as soon as one resolved region is updated
     s3_log_extraction.summarize.generate_summaries(
@@ -524,7 +547,7 @@ def test_summaries_tolerate_none_region_entries(tmpdir: py.path.local) -> None:
     )
 
     by_region = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_region.tsv")
-    assert sorted(by_region["region"]) == ["US/CA", "bogon", "missing"]
+    assert sorted(by_region["region"]) == ["USA/CA", "bogon", "missing"]
     assert (test_dir / "summaries" / "ds001" / "requester_count.tsv").read_text().strip() == "3"
 
 
