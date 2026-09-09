@@ -12,7 +12,13 @@ from .globals import (
     TIMESTAMP_FORMAT,
 )
 from ..config import get_cache_directory, get_cache_subdirectory
-from ..ip_utils import country_alpha_2_to_alpha_3, is_cloud_service_or_vpn_label, is_resolved_region, load_ip_cache
+from ..ip_utils import (
+    IpRegionResolver,
+    RegionResolver,
+    country_alpha_2_to_alpha_3,
+    is_cloud_service_or_vpn_label,
+    is_resolved_region,
+)
 from ..ip_utils._ip_utils import _read_ips_from_file
 
 
@@ -239,7 +245,7 @@ def _collect_asset_views(
 def _collect_unique_ips(
     asset_directories: list[pathlib.Path],
     use_encryption: bool = True,
-    ip_to_region: dict[str, str] | None = None,
+    region_resolver: RegionResolver | None = None,
 ) -> set[str]:
     """
     Collect all unique IP addresses across the given asset directories.
@@ -251,8 +257,8 @@ def _collect_unique_ips(
     use_encryption : bool
         If ``True`` (default), ``ips.txt`` files are decrypted before reading.
         If ``False``, files are read as plaintext.
-    ip_to_region : dict of str to str, optional
-        Mapping of IP address to region/service label, used to exclude known cloud
+    region_resolver : RegionResolver, optional
+        Resolves each IP address to its region/service label, used to exclude known cloud
         service IPs (e.g. GitHub, AWS, GCP, VPN) from the collected set. If not
         provided, no exclusion is applied.
 
@@ -262,14 +268,16 @@ def _collect_unique_ips(
         The set of unique IP addresses found across all ``ips.txt`` files, excluding
         any IPs classified as a known cloud service or VPN.
     """
-    ip_to_region = ip_to_region or {}
     unique_ips: set[str] = set()
     for asset_directory in asset_directories:
         full_ips_file_path = asset_directory / "ips.txt"
         if not full_ips_file_path.exists():
             continue
         ips = _read_ips_from_file(file_path=full_ips_file_path, use_encryption=use_encryption)
-        unique_ips.update(ip for ip in ips if not is_cloud_service_or_vpn_label(ip_to_region.get(ip) or ""))
+        if region_resolver is None:
+            unique_ips.update(ips)
+        else:
+            unique_ips.update(ip for ip in ips if not is_cloud_service_or_vpn_label(region_resolver.resolve(ip)))
     return unique_ips
 
 
@@ -277,7 +285,7 @@ def _summarize_dataset_requester_count(
     *,
     asset_directories: list[pathlib.Path],
     summary_file_path: pathlib.Path,
-    ip_to_region: dict[str, str],
+    region_resolver: RegionResolver,
     use_encryption: bool = True,
 ) -> None:
     """
@@ -296,15 +304,15 @@ def _summarize_dataset_requester_count(
         Paths to the per-asset extraction directories containing ``ips.txt`` files.
     summary_file_path : pathlib.Path
         Destination file where the count (as a string) will be written.
-    ip_to_region : dict of str to str
-        Mapping of IP address to region/service label, used to exclude known cloud
+    region_resolver : RegionResolver
+        Resolves each IP address to its region/service label, used to exclude known cloud
         service IPs (e.g. GitHub, AWS, GCP, VPN) from the requester count.
     use_encryption : bool
         If ``True`` (default), ``ips.txt`` files are decrypted before reading.
         If ``False``, files are read as plaintext.
     """
     unique_ips = _collect_unique_ips(
-        asset_directories=asset_directories, use_encryption=use_encryption, ip_to_region=ip_to_region
+        asset_directories=asset_directories, use_encryption=use_encryption, region_resolver=region_resolver
     )
 
     if not unique_ips:
@@ -319,6 +327,7 @@ def generate_summaries(
     cache_directory: str | pathlib.Path | None = None,
     use_encryption: bool = True,
     region_disclosure_threshold: int = REGION_DISCLOSURE_THRESHOLD,
+    region_resolver: RegionResolver | None = None,
 ) -> None:
     """
     Generate summaries for each dataset in the extraction directory.
@@ -326,7 +335,12 @@ def generate_summaries(
     There are several TSV summary files generated per outer level of the S3 bucket structure:
         - `by_day.tsv`: Summarizes the total bytes sent per day across all assets in the dataset.
         - `by_asset.tsv`: Summarizes the total bytes sent per asset in the dataset.
-        - `by_region.tsv`: Summarizes the total bytes sent per region based on geolocations of the indexed IPs.
+        - `by_region.tsv`: Summarizes the total bytes sent per region based on geolocations of the requester IPs.
+
+    Requesters are geolocated while the summaries are generated: each IP address is checked against the
+    published ranges of known cloud services and VPNs, and otherwise looked up in the local GeoLite2-City
+    database, which is downloaded on first use (see ``update_geolite2_database``). No location of any
+    requester is written to disk; only the aggregated by-region summaries are.
 
     Every summary is written with its true values, except for `by_region.tsv`. That one pairs activity with
     requester location, so it is written only when the update it carries moves more than
@@ -342,11 +356,14 @@ def generate_summaries(
     cache_directory : str | pathlib.Path | None
         Path to the cache directory.
     use_encryption : bool
-        If ``True`` (default), ``ips.txt`` and IP cache files are decrypted when read.
+        If ``True`` (default), ``ips.txt`` files are decrypted when read.
         If ``False``, files are read as plaintext.
     region_disclosure_threshold : int
         Number of resolved regions an update to a `by_region.tsv` must move at once to be published.
         Default is ``REGION_DISCLOSURE_THRESHOLD`` (5).
+    region_resolver : RegionResolver, optional
+        Resolves each IP address to its region/service label. Defaults to an ``IpRegionResolver`` over the
+        GeoLite2 database in the cache directory.
     """
     if level != 0:
         message = (
@@ -359,39 +376,45 @@ def generate_summaries(
     extraction_directory = cache_dir / "extraction"
     extraction_directory.mkdir(exist_ok=True)
     summary_directory = get_cache_subdirectory(cache_directory=cache_directory, name="summaries")
-    ip_to_region = load_ip_cache(
-        cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
-    )
 
-    datasets = [item for item in extraction_directory.iterdir() if item.is_dir()]
-    all_archive_unique_ips: set[str] = set()
-    for dataset in tqdm.tqdm(
-        iterable=datasets,
-        total=len(datasets),
-        desc="Summarizing Datasets",
-        position=0,
-        leave=True,
-        mininterval=5.0,
-        smoothing=0,
-        unit="dataset",
-    ):
-        dataset_id = dataset.name
+    owns_resolver = region_resolver is None
+    if owns_resolver:
+        region_resolver = IpRegionResolver(cache_directory=cache_directory)
 
-        asset_directories = sorted([file_path.parent for file_path in dataset.rglob(pattern="*bytes_sent.txt")])
-        _summarize_dataset(
-            dataset_id=dataset_id,
-            asset_directories=asset_directories,
-            summary_directory=summary_directory,
-            ip_to_region=ip_to_region,
-            use_encryption=use_encryption,
-            region_disclosure_threshold=region_disclosure_threshold,
-        )
+    try:
+        datasets = [item for item in extraction_directory.iterdir() if item.is_dir()]
+        all_archive_unique_ips: set[str] = set()
+        for dataset in tqdm.tqdm(
+            iterable=datasets,
+            total=len(datasets),
+            desc="Summarizing Datasets",
+            position=0,
+            leave=True,
+            mininterval=5.0,
+            smoothing=0,
+            unit="dataset",
+        ):
+            dataset_id = dataset.name
 
-        all_archive_unique_ips.update(
-            _collect_unique_ips(
-                asset_directories=asset_directories, use_encryption=use_encryption, ip_to_region=ip_to_region
+            asset_directories = sorted([file_path.parent for file_path in dataset.rglob(pattern="*bytes_sent.txt")])
+            _summarize_dataset(
+                dataset_id=dataset_id,
+                asset_directories=asset_directories,
+                summary_directory=summary_directory,
+                region_resolver=region_resolver,
+                use_encryption=use_encryption,
+                region_disclosure_threshold=region_disclosure_threshold,
             )
-        )
+
+            all_archive_unique_ips.update(
+                _collect_unique_ips(
+                    asset_directories=asset_directories, use_encryption=use_encryption, region_resolver=region_resolver
+                )
+            )
+    finally:
+        if owns_resolver:
+            region_resolver.close()
+
     if all_archive_unique_ips:
         archive_directory = summary_directory / "archive"
         archive_directory.mkdir(exist_ok=True)
@@ -403,7 +426,7 @@ def _summarize_dataset(
     dataset_id: str,
     asset_directories: list[pathlib.Path],
     summary_directory: pathlib.Path,
-    ip_to_region: dict[str, str],
+    region_resolver: RegionResolver,
     use_encryption: bool = True,
     region_disclosure_threshold: int = REGION_DISCLOSURE_THRESHOLD,
 ) -> None:
@@ -426,7 +449,7 @@ def _summarize_dataset(
     _summarize_dataset_by_region(
         asset_directories=asset_directories,
         summary_file_path=summary_directory / dataset_id / "by_region.tsv",
-        ip_to_region=ip_to_region,
+        region_resolver=region_resolver,
         views_by_asset_directory=views_by_asset_directory,
         use_encryption=use_encryption,
         region_disclosure_threshold=region_disclosure_threshold,
@@ -434,7 +457,7 @@ def _summarize_dataset(
     _summarize_dataset_requester_count(
         asset_directories=asset_directories,
         summary_file_path=summary_directory / dataset_id / "requester_count.tsv",
-        ip_to_region=ip_to_region,
+        region_resolver=region_resolver,
         use_encryption=use_encryption,
     )
 
@@ -556,7 +579,7 @@ def _summarize_dataset_by_region(
     *,
     asset_directories: list[pathlib.Path],
     summary_file_path: pathlib.Path,
-    ip_to_region: dict[str, str],
+    region_resolver: RegionResolver,
     views_by_asset_directory: dict[pathlib.Path, list[tuple[str, str]]],
     use_encryption: bool = True,
     region_disclosure_threshold: int = REGION_DISCLOSURE_THRESHOLD,
@@ -566,10 +589,9 @@ def _summarize_dataset_by_region(
     all_downloads = []
     number_of_views_by_region = collections.defaultdict(int)
     for asset_directory in asset_directories:
+        # A view is made by a single requester, so it belongs to the region of that one IP
         for _, view_ip in views_by_asset_directory.get(asset_directory, []):
-            # A ``None`` entry, as written by earlier versions for an address that could not be geolocated,
-            # names no place any more than an absent one does
-            number_of_views_by_region[ip_to_region.get(view_ip) or "missing"] += 1
+            number_of_views_by_region[region_resolver.resolve(view_ip)] += 1
 
         # TODO: Could add a step here to track which object IDs have been processed, and if encountered again
         # Just copy the file over instead of reprocessing
@@ -579,7 +601,7 @@ def _summarize_dataset_by_region(
             continue
 
         full_ips = _read_ips_from_file(file_path=full_ips_file_path, use_encryption=use_encryption)
-        regions = [ip_to_region.get(ip) or "missing" for ip in full_ips]
+        regions = [region_resolver.resolve(ip) for ip in full_ips]
         all_regions.extend(regions)
 
         bytes_sent_file_path = asset_directory / "bytes_sent.txt"

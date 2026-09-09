@@ -41,6 +41,15 @@ def _fail_if_maxmind_rejected(exc: Exception) -> None:
         )
 
 
+def _write_by_region_summary(summary_file_path: pathlib.Path, regions: list[str]) -> None:
+    """Write a minimal published by-region summary listing the given region labels."""
+    summary_file_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = "\n".join(f"{region}\t1\t1\t0\t1" for region in regions)
+    summary_file_path.write_text(
+        f"region\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\tnumber_of_views\n{rows}\n"
+    )
+
+
 @pytest.mark.remote
 @pytest.mark.ai_generated
 def test_update_geolite2_database_remote(tmp_path: pathlib.Path) -> None:
@@ -67,9 +76,9 @@ def test_update_geolite2_database_remote(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.remote
 @pytest.mark.ai_generated
-def test_update_ip_to_region_codes_remote(tmp_path: pathlib.Path) -> None:
+def test_resolver_resolves_public_ip_remote(tmp_path: pathlib.Path) -> None:
     """
-    Test that update_ip_to_region_codes resolves a real public IP via a freshly downloaded GeoLite2 database.
+    Test that the resolver classifies a real public IP via the live service listings and a freshly downloaded database.
 
     Uses ``4.4.4.4`` (Level3/Lumen Technologies), a major US-ISP address that is
     outside GitHub, AWS, GCP, and VPN CIDR ranges, to exercise the database lookup path.
@@ -83,31 +92,25 @@ def test_update_ip_to_region_codes_remote(tmp_path: pathlib.Path) -> None:
 
     _assert_maxmind_credentials_are_set()
 
-    # Write the ips.txt in an extraction directory
-    extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
-    extraction_dir.mkdir(parents=True)
-    (extraction_dir / "ips.txt").write_text(test_ip)
-
     try:
-        s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
+        with s3_log_extraction.ip_utils.IpRegionResolver(cache_directory=tmp_path) as resolver:
+            region = resolver.resolve(test_ip)
+            # The live listings must have been fetched for every known service
+            assert set(resolver.service_networks.keys()) == {"GitHub", "AWS", "GCP", "VPN"}
+            assert all(len(networks) > 0 for networks in resolver.service_networks.values())
     except Exception as exc:
         _fail_if_maxmind_rejected(exc)
         raise
 
-    ip_cache_dir = tmp_path / "ips"
-    ip_to_region_file = ip_cache_dir / "ip_to_region.yaml"
-    assert ip_to_region_file.exists(), "ip_to_region.yaml was not created"
-
-    ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert test_ip in ip_to_region, f"Expected IP {test_ip} to be resolved, got: {ip_to_region}"
-    region = ip_to_region[test_ip]
     assert isinstance(region, str) and _REGION_LABEL_PATTERN.match(
         region
     ), f"Expected an ISO 3166 label such as 'USA/CA', got: {region!r}"
+    assert (tmp_path / "geolite2" / "GeoLite2-City.mmdb").exists(), "The database was not downloaded on first use"
 
     # The resolved label must also have coordinates in the bundled tables, so that the heat maps can place it
+    _write_by_region_summary(tmp_path / "summaries" / "ds001" / "by_region.tsv", regions=[region])
     s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
-    coordinates = yaml.safe_load((ip_cache_dir / "region_codes_to_coordinates.yaml").read_text()) or {}
+    coordinates = yaml.safe_load((tmp_path / "ips" / "region_codes_to_coordinates.yaml").read_text()) or {}
     assert region in coordinates, f"Expected '{region}' to have coordinates, got keys: {list(coordinates.keys())}"
     assert isinstance(coordinates[region]["latitude"], float) and isinstance(coordinates[region]["longitude"], float)
 
@@ -127,9 +130,7 @@ def test_update_region_code_coordinates_locates_aws_region_remote(tmp_path: path
 
     _assert_maxmind_credentials_are_set()
 
-    ip_cache_dir = tmp_path / "ips"
-    ip_cache_dir.mkdir()
-    (ip_cache_dir / "ip_to_region.yaml").write_text(yaml.dump({"52.0.0.1": region_code}))
+    _write_by_region_summary(tmp_path / "summaries" / "ds001" / "by_region.tsv", regions=[region_code])
 
     try:
         s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
@@ -137,7 +138,7 @@ def test_update_region_code_coordinates_locates_aws_region_remote(tmp_path: path
         _fail_if_maxmind_rejected(exc)
         raise
 
-    coordinates = yaml.safe_load((ip_cache_dir / "region_codes_to_coordinates.yaml").read_text()) or {}
+    coordinates = yaml.safe_load((tmp_path / "ips" / "region_codes_to_coordinates.yaml").read_text()) or {}
     assert region_code in coordinates, f"Expected '{region_code}' to be located, got keys: {list(coordinates.keys())}"
     entry = coordinates[region_code]
     assert isinstance(entry["latitude"], float), f"Expected float latitude, got: {entry['latitude']!r}"

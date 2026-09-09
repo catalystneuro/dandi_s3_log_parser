@@ -93,32 +93,33 @@ s3logextraction stop
 
 This will allow it to finish processing the current batch of logs and then exit gracefully.
 
-After your logs are extracted, generate anonymized indexes for each IP address:
-
-```bash
-s3logextraction update ip indexes
-````
-
-Next, ensure the environment variables for the geolocation database are set:
+After your logs are extracted, ensure the environment variables for the geolocation database are set:
 
 - **MAXMIND_ACCOUNT_ID** and **MAXMIND_LICENSE_KEY**
   - Credentials of a free [MaxMind](https://www.maxmind.com/en/geolite2/signup) account, used to download the [GeoLite2-City](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) database.
-  - The database is queried locally to map each IP address to its ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code (e.g. "USA/CA" for California) for anonymized statistics. IP addresses in the published ranges of GitHub, AWS, GCP, and known VPN or datacenter providers are labeled by that service instead.
-  - The database is downloaded into the cache directory on first use and refreshed automatically once it is more than a week old, so the credentials only need to be set on machines that update the region codes.
+  - The database is downloaded into the cache directory on first use and refreshed automatically once it is more than a week old, so the credentials only need to be set on machines that generate the summaries.
 
 ```bash
 export MAXMIND_ACCOUNT_ID="your_account_id_here"
 export MAXMIND_LICENSE_KEY="your_license_key_here"
 ```
 
-To update the region codes and their coordinates:
+To generate top-level summaries and totals (that is, per dataset):
 
 ```bash
-s3logextraction update ip regions
+s3logextraction update summaries
+s3logextraction update totals
+```
+
+Requesters are geolocated while the summaries are generated. Each IP address is checked against the published ranges of GitHub, AWS, GCP, and known VPN or datacenter providers, and labeled by that service if it falls in one; otherwise it is looked up in the local GeoLite2 database and labeled with its ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code (e.g. "USA/CA" for California). Fetching the published ranges needs network access. No requester's location is written to disk; only the aggregated `by_region.tsv` summaries are.
+
+To give every region of the published summaries a coordinate, for maps:
+
+```bash
 s3logextraction update ip coordinates
 ```
 
-The coordinates step needs no credentials: each region code is looked up in ISO 3166 tables bundled with the package, whose coordinates come from the public-domain [Natural Earth](https://www.naturalearthdata.com) dataset. Cloud service regions such as `AWS/us-east-1` are located with the GeoLite2 database.
+This step needs no credentials: each region code is looked up in ISO 3166 tables bundled with the package, whose coordinates come from the public-domain [Natural Earth](https://www.naturalearthdata.com) dataset. Cloud service regions such as `AWS/us-east-1` are located with the GeoLite2 database.
 
 To force a fresh download of the GeoLite2 database (this happens automatically when it is stale):
 
@@ -127,13 +128,6 @@ s3logextraction update ip database --force
 ```
 
 This product includes GeoLite2 Data created by MaxMind, available from https://www.maxmind.com.
-
-To generate top-level summaries and totals (that is, per dataset):
-
-```bash
-s3logextraction update summaries
-s3logextraction update totals
-```
 
 Finally, to generate archive-wide summaries and totals:
 
