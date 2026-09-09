@@ -1,11 +1,10 @@
 import datetime
 import math
-import os
 import pathlib
-import warnings
 
 import yaml
 
+from ._geolite2 import open_geolite2_database
 from ._ip_cache import load_ip_cache, write_ip_cache
 from ._update_ip_to_region_codes import _get_region_code_from_ip_address
 from ..config import get_cache_subdirectory
@@ -20,7 +19,7 @@ def refresh_ip_to_region_codes(
     _today: datetime.date | None = None,
 ) -> None:
     """
-    Refresh a subset of the existing ``ip_to_region`` cache entries by re-querying IPInfo.
+    Refresh a subset of the existing ``ip_to_region`` cache entries by re-resolving them against GeoLite2.
 
     The subset is selected deterministically based on the current date using a
     90-day cycle that partitions the alphabetically ordered IPs. Running this
@@ -42,8 +41,6 @@ def refresh_ip_to_region_codes(
         Override today's date. Intended for testing only.
         If ``None`` (default), ``datetime.date.today()`` is used.
     """
-    import ipinfo
-
     ip_to_region = load_ip_cache(
         cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
     )
@@ -67,30 +64,14 @@ def refresh_ip_to_region_codes(
     if not ips_to_refresh:
         return
 
-    ipinfo_api_key = os.environ.get("IPINFO_API_KEY", None)
-    if ipinfo_api_key is None:
-        message = "The environment variable 'IPINFO_API_KEY' must be set to use `refresh_ip_to_region_codes`!"
-        raise ValueError(message)  # pragma: no cover
-    ipinfo_handler = ipinfo.getHandler(access_token=ipinfo_api_key)
-
     changes: dict[str, dict[str, str]] = {}
-    for ip_address in ips_to_refresh:
-        old_region = ip_to_region[ip_address]
-        try:
-            new_region = _get_region_code_from_ip_address(ip_address=ip_address, ipinfo_handler=ipinfo_handler)
-        except ipinfo.exceptions.RequestQuotaExceededError:
-            warnings.warn(
-                message=(
-                    "IPInfo API request quota exceeded. Halting the refresh early; "
-                    "existing cache entries are left unchanged."
-                ),
-                category=RuntimeWarning,
-                stacklevel=2,
-            )
-            break
-        if new_region != old_region:
-            changes[ip_address] = {"old": old_region, "new": new_region}
-            ip_to_region[ip_address] = new_region
+    with open_geolite2_database(cache_directory=cache_directory) as geolite2_reader:
+        for ip_address in ips_to_refresh:
+            old_region = ip_to_region[ip_address]
+            new_region = _get_region_code_from_ip_address(ip_address=ip_address, geolite2_reader=geolite2_reader)
+            if new_region != old_region:
+                changes[ip_address] = {"old": old_region, "new": new_region}
+                ip_to_region[ip_address] = new_region
 
     if changes:
         logs_directory = get_cache_subdirectory(cache_directory=cache_directory, name="logs")

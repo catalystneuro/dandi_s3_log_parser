@@ -1,96 +1,12 @@
 AWS/us-east-2:
   latitude: 39.9612
   longitude: -82.9988
-BO/La Paz Department:
-  latitude: -11.7773231
-  longitude: -67.4519752
-"CL/Valpara\xEDso":
-  latitude: -32.5976089
-  longitude: -70.8529753
-CN/Hainan:
-  latitude: 19.2000001
-  longitude: 109.5999999
-CO/Huila Department:
-  latitude: 2.5359349
-  longitude: -75.5276699
-CO/Risaralda Department:
-  latitude: 5.2102948
-  longitude: -75.9842236
-"CR/San Jos\xE9":
-  latitude: 9.9325427
-  longitude: -84.0795782
-"ES/Castille and Le\xF3n":
-  latitude: 42.0
-  longitude: -5.5
-FR/Grand Est:
-  latitude: 48.580002
-  longitude: 7.75
 GCP/us-central1:
   latitude: 41.2619
   longitude: -95.8608
 GitHub:
   latitude: null
   longitude: null
-IQ/Sulaymaniyah:
-  latitude: 35.5574725
-  longitude: 45.435202
-JP/Ishikawa:
-  latitude: 36.9890574
-  longitude: 136.8162839
-"MO/S\xE3o Francisco Xavier":
-  latitude: 22.210928
-  longitude: 113.552971
-"MX/M\xE9xico":
-  latitude: 19.4326296
-  longitude: -99.1331785
-NI/Managua Department:
-  latitude: 12.125
-  longitude: -86.31
-NO/Vestland:
-  latitude: 60.9291011
-  longitude: 6.1078869
-NZ/Taranaki Region:
-  latitude: -39.3848064
-  longitude: 174.1973505
-"PA/Panam\xE1":
-  latitude: 8.559559
-  longitude: -81.1308434
-"PA/Panam\xE1 Oeste Province":
-  latitude: 8.88028
-  longitude: -79.7833
-PE/Lima Province:
-  latitude: -12.5453873
-  longitude: -75.8599243
-PL/Greater Poland:
-  latitude: 52.406374
-  longitude: 16.9251681
-PL/Pomerania:
-  latitude: 53.428543
-  longitude: 14.552811
-PL/Silesia:
-  latitude: 50.6966393
-  longitude: 17.9254068
-PL/Subcarpathia:
-  latitude: 50.0575
-  longitude: 22.0896
-PR/San Juan:
-  latitude: 18.384239
-  longitude: -66.05344
-RU/Mordoviya Republic:
-  latitude: 54.5
-  longitude: 44
-RU/Rostov:
-  latitude: 57.2012699
-  longitude: 39.4221813
-TW/Takao:
-  latitude: 22.6226696
-  longitude: 120.2764261
-UY/Montevideo Department:
-  latitude: -34.9058916
-  longitude: -56.1913095
-VN/Long An Povince:
-  latitude: 10.5607168
-  longitude: 106.6497623
 VPN:
   latitude: null
   longitude: null

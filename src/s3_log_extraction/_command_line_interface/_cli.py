@@ -12,7 +12,12 @@ from ..extractors import (
     S3LogAccessExtractor,
     stop_extraction,
 )
-from ..ip_utils import refresh_ip_to_region_codes, update_ip_to_region_codes, update_region_code_coordinates
+from ..ip_utils import (
+    refresh_ip_to_region_codes,
+    update_geolite2_database,
+    update_ip_to_region_codes,
+    update_region_code_coordinates,
+)
 from ..summarize import (
     generate_all_dataset_totals,
     generate_archive_summaries,
@@ -238,6 +243,39 @@ def _update_ip_cli() -> None:
     pass
 
 
+# s3logextraction update ip database
+@_update_ip_cli.command(name="database")
+@rich_click.option(
+    "--cache",
+    "cache_directory",
+    help=(
+        "Use a non-default cache directory for this command. "
+        "This overrides the configured cache directory without modifying saved config."
+    ),
+    required=False,
+    type=rich_click.Path(writable=True, file_okay=False, dir_okay=True),
+    default=None,
+)
+@rich_click.option(
+    "--force",
+    help="Download a fresh copy even if the cached database is not yet stale.",
+    is_flag=True,
+    default=False,
+)
+def _update_ip_database_cli(cache_directory: str | None = None, force: bool = False) -> None:
+    """
+    Download the MaxMind GeoLite2-City database used to geolocate IP addresses, if missing or stale.
+
+    Requires the MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY environment variables of a (free) MaxMind account.
+    The `regions` and `refresh` commands run this automatically, so it is only needed to force a refresh.
+    """
+    database_path = update_geolite2_database(
+        cache_directory=pathlib.Path(cache_directory) if cache_directory is not None else None,
+        force=force,
+    )
+    print(f"GeoLite2 database is up to date at {database_path}")
+
+
 # s3logextraction update ip regions
 @_update_ip_cli.command(name="regions")
 @rich_click.option(
@@ -300,7 +338,7 @@ def _update_ip_regions_cli(
 )
 def _refresh_ip_regions_cli(cache_directory: str | None = None, use_encryption: bool = True) -> None:
     """
-    Refresh a subset of the ip_to_region cache by re-querying IPInfo and log any changes.
+    Refresh a subset of the ip_to_region cache by re-resolving it against GeoLite2 and log any changes.
 
     Selects IPs deterministically based on today's date using a 90-day cycle over the
     alphabetically sorted cache. Run once per day to refresh the entire cache every 90 days.
@@ -389,7 +427,7 @@ def _update_ip_coordinates_cli(cache_directory: str | None = None, use_encryptio
     help=(
         "The number of resolved regions an update to a 'by_region.tsv' must move at once for it to be published. "
         "Below this, the summary is left as it was, so that no single requester's activity can be read off "
-        "the change. A resolved region is any label naming a physical place, such as 'US/California'."
+        "the change. A resolved region is any label naming a physical place, such as 'US/CA'."
     ),
     required=False,
     type=rich_click.IntRange(min=0),

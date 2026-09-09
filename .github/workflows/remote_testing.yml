@@ -4,7 +4,9 @@ on:
     secrets:
       S3_LOG_EXTRACTION_PASSWORD:
         required: true
-      IPINFO_API_KEY:
+      MAXMIND_ACCOUNT_ID:
+        required: true
+      MAXMIND_LICENSE_KEY:
         required: true
       OPENCAGE_API_KEY:
         required: true
@@ -16,7 +18,8 @@ permissions:
 
 env:
   S3_LOG_EXTRACTION_PASSWORD: ${{ secrets.S3_LOG_EXTRACTION_PASSWORD }}
-  IPINFO_API_KEY: ${{ secrets.IPINFO_API_KEY }}
+  MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+  MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
   OPENCAGE_API_KEY: ${{ secrets.OPENCAGE_API_KEY }}
 
 jobs:
@@ -48,7 +51,7 @@ jobs:
       - name: Ensure caching is working
         run: ls ~
 
-      - name: Cache IP to region mapping to prevent overuse of IPInfo and OpenCage APIs
+      - name: Cache the GeoLite2 database and IP to region mapping to avoid re-downloading and overuse of OpenCage
         uses: actions/cache@v6
         id: enable_cache
         with:
