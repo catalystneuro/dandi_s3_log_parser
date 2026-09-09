@@ -16,7 +16,7 @@ packages = ["src/s3_log_extraction"]
 
 [project]
 name = "s3-log-extraction"
-version="1.11.2"
+version="1.11.3"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
