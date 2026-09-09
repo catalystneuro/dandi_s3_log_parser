@@ -1,337 +1,501 @@
 import datetime
+import io
 import pathlib
-import shutil
+import pickle
+import tarfile
 import unittest.mock
 
-import ipinfo
-import opencage.geocoder
-import py
+import geoip2.errors
 import pytest
 import yaml
 
 import s3_log_extraction
+from s3_log_extraction.ip_utils import IpRegionResolver, MappingRegionResolver, RegionResolver
+from s3_log_extraction.ip_utils._geolite2 import (
+    GEOLITE2_DATABASE_FILE_NAME,
+    GEOLITE2_MAX_DATABASE_AGE_IN_DAYS,
+    _is_database_stale,
+    open_geolite2_database,
+    update_geolite2_database,
+)
+from s3_log_extraction.ip_utils._region_codes import country_alpha_2_to_alpha_3, get_region_coordinates
+
+# Loose bounding boxes (south, north, west, east) used to check that a coordinate lands in the right place
+_CALIFORNIA_BOX = (32.0, 42.5, -125.0, -114.0)
+_ENGLAND_BOX = (49.5, 56.0, -6.5, 2.0)
+_BAVARIA_BOX = (47.0, 50.7, 8.9, 13.9)
+_CONTIGUOUS_US_BOX = (24.0, 50.0, -125.0, -66.0)
+
+_NO_SERVICE_NETWORKS = {"GitHub": [], "AWS": [], "GCP": [], "VPN": []}
 
 
-def test_ip_utils(tmpdir: py.path.local, monkeypatch: pytest.MonkeyPatch) -> None:
-    test_cache = pathlib.Path(tmpdir)
-    test_ips_dir = test_cache / "ips"
-
-    base_tests_dir = pathlib.Path(__file__).parent
-    expected_cache = base_tests_dir / "expected_output"
-    expected_ips_dir = expected_cache / "ips"
-
-    # Provide non-None dummy keys so the guard checks in update functions pass without real credentials.
-    # No actual API calls are made because the ips cache is pre-seeded with expected output below.
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
-
-    # Pre-seed the ips cache with expected output so the update functions see a complete cache and skip API calls.
-    # With all IPs already present in ip_to_region.yaml, ips_to_update will be empty and no remote calls are made.
-    shutil.copytree(src=expected_ips_dir, dst=test_ips_dir, dirs_exist_ok=True)
-
-    # Test updating IPs to region codes and coordinates
-    s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=test_cache, use_encryption=False)
-    s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=test_cache, use_encryption=False)
-    s3_log_extraction.testing.assert_filetree_matches(test_dir=test_ips_dir, expected_dir=expected_ips_dir)
+def _assert_within(coordinates: dict[str, float], box: tuple[float, float, float, float]) -> None:
+    south, north, west, east = box
+    assert south < coordinates["latitude"] < north and west < coordinates["longitude"] < east, coordinates
 
 
-def test_refresh_ip_to_region_codes(tmpdir: py.path.local, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that refresh_ip_to_region_codes selects the correct IP partition and records changes."""
-    test_cache = pathlib.Path(tmpdir)
-    test_ips_dir = test_cache / "ips"
-    test_ips_dir.mkdir(parents=True)
-
-    # Seed the cache with known IPs and regions using RFC 5737 TEST-NET-1 documentation addresses (bogons)
-    initial_ip_to_region = {
-        "192.0.2.1": "US/California",
-        "192.0.2.2": "US/New York",
-        "192.0.2.3": "US/Texas",
-        "192.0.2.4": "UK/England",
-        "192.0.2.5": "DE/Bavaria",
-    }
-    ip_to_region_file = test_ips_dir / "ip_to_region.yaml"
-    ip_to_region_file.write_text(yaml.dump(initial_ip_to_region))
-
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    # Use a fixed date: toordinal() % 90 == 0 means partition_index = 0
-    # Find a date where today.toordinal() % 90 == 0
-    fixed_ordinal_base = datetime.date(2000, 1, 1).toordinal()
-    # Adjust to find a day where ordinal % 90 == 0
-    offset = (-fixed_ordinal_base) % 90
-    fixed_date = datetime.date.fromordinal(fixed_ordinal_base + offset)
-    assert fixed_date.toordinal() % 90 == 0
-
-    # With 5 IPs and partition_size = ceil(5/90) = 1, partition_index = 0 picks sorted_ips[0:1]
-    sorted_ips = sorted(initial_ip_to_region.keys())
-    # partition_size = ceil(5/90) = 1; partition 0 -> sorted_ips[0:1] = ["192.0.2.1"]
-    expected_refreshed_ip = sorted_ips[0]  # "192.0.2.1"
-    new_region_for_refreshed_ip = "US/Oregon"
-
-    def mock_get_region_code(ip_address: str, ipinfo_handler: object) -> str:
-        if ip_address == expected_refreshed_ip:
-            return new_region_for_refreshed_ip
-        return initial_ip_to_region[ip_address]  # pragma: no cover
-
-    with unittest.mock.patch(
-        "s3_log_extraction.ip_utils._refresh_ip_to_region_codes._get_region_code_from_ip_address",
-        mock_get_region_code,
-    ):
-        with unittest.mock.patch("ipinfo.getHandler"):
-            s3_log_extraction.ip_utils.refresh_ip_to_region_codes(
-                cache_directory=test_cache,
-                use_encryption=False,
-                _today=fixed_date,
-            )
-
-    # The cache should have the updated region for the refreshed IP
-    updated_ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert updated_ip_to_region[expected_refreshed_ip] == new_region_for_refreshed_ip
-    # All other IPs should remain unchanged
-    for ip, region in initial_ip_to_region.items():
-        if ip != expected_refreshed_ip:
-            assert updated_ip_to_region[ip] == region
-
-    # A log file should exist under cache/logs/
-    logs_dir = test_cache / "logs"
-    log_file = logs_dir / f"ip_refresh_{fixed_date.isoformat()}.yaml"
-    assert log_file.exists(), f"Log file not found: {log_file}"
-
-    log_data = yaml.safe_load(log_file.read_text()) or {}
-    assert log_data["date"] == fixed_date.isoformat()
-    assert log_data["partition_index"] == 0
-    assert log_data["ips_checked"] == 1
-    assert expected_refreshed_ip in log_data["changes"]
-    assert log_data["changes"][expected_refreshed_ip]["old"] == "US/California"
-    assert log_data["changes"][expected_refreshed_ip]["new"] == new_region_for_refreshed_ip
+def _make_city_response(
+    *,
+    country_code: str | None = None,
+    subdivision_codes: tuple[str, ...] = (),
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> unittest.mock.MagicMock:
+    """Build a stand-in for a ``geoip2.models.City`` response with only the attributes the code reads."""
+    response = unittest.mock.MagicMock()
+    response.country.iso_code = country_code
+    response.subdivisions = [unittest.mock.MagicMock(iso_code=code) for code in subdivision_codes]
+    response.location.latitude = latitude
+    response.location.longitude = longitude
+    return response
 
 
-def test_refresh_ip_to_region_codes_no_changes(tmpdir: py.path.local, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that no log file is written when no regions have changed."""
-    test_cache = pathlib.Path(tmpdir)
-    test_ips_dir = test_cache / "ips"
-    test_ips_dir.mkdir(parents=True)
+def _make_reader(city_responses: dict[str, object]) -> unittest.mock.MagicMock:
+    """Build a stand-in for a ``geoip2.database.Reader`` that also works as a context manager."""
 
-    initial_ip_to_region = {"192.0.2.1": "US/California"}
-    ip_to_region_file = test_ips_dir / "ip_to_region.yaml"
-    ip_to_region_file.write_text(yaml.dump(initial_ip_to_region))
+    def city(ip_address: str) -> object:
+        response = city_responses[ip_address]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    fixed_ordinal_base = datetime.date(2000, 1, 1).toordinal()
-    offset = (-fixed_ordinal_base) % 90
-    fixed_date = datetime.date.fromordinal(fixed_ordinal_base + offset)
-
-    def mock_get_region_code_unchanged(ip_address: str, ipinfo_handler: object) -> str:
-        return initial_ip_to_region[ip_address]
-
-    with unittest.mock.patch(
-        "s3_log_extraction.ip_utils._refresh_ip_to_region_codes._get_region_code_from_ip_address",
-        mock_get_region_code_unchanged,
-    ):
-        with unittest.mock.patch("ipinfo.getHandler"):
-            s3_log_extraction.ip_utils.refresh_ip_to_region_codes(
-                cache_directory=test_cache,
-                use_encryption=False,
-                _today=fixed_date,
-            )
-
-    # Cache should be unchanged
-    updated_ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert updated_ip_to_region == initial_ip_to_region
-
-    # No log file should be written when there are no changes
-    logs_dir = test_cache / "logs"
-    assert not logs_dir.exists() or not any(logs_dir.iterdir())
+    reader = unittest.mock.MagicMock()
+    reader.city.side_effect = city
+    reader.__enter__.return_value = reader
+    return reader
 
 
-def test_refresh_ip_to_region_codes_empty_cache(tmpdir: py.path.local, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that refresh_ip_to_region_codes returns early when the cache is empty."""
-    test_cache = pathlib.Path(tmpdir)
-    test_ips_dir = test_cache / "ips"
-    test_ips_dir.mkdir(parents=True)
-    (test_ips_dir / "ip_to_region.yaml").write_text("")
-
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    # Should not raise and should not write any log files
-    s3_log_extraction.ip_utils.refresh_ip_to_region_codes(cache_directory=test_cache, use_encryption=False)
-
-    logs_dir = test_cache / "logs"
-    assert not logs_dir.exists() or not any(logs_dir.iterdir())
+def _write_by_region_summary(summary_file_path: pathlib.Path, regions: list[str]) -> None:
+    """Write a minimal published by-region summary listing the given region labels."""
+    summary_file_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = "\n".join(f"{region}\t1\t1\t0\t1" for region in regions)
+    summary_file_path.write_text(
+        f"region\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\tnumber_of_views\n{rows}\n"
+    )
 
 
-@pytest.mark.ai_generated
-def test_update_ip_to_region_codes_handles_ipinfo_quota_exceeded(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """update_ip_to_region_codes halts early on quota exhaustion and leaves unprocessed IPs uncached."""
-    extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
-    extraction_dir.mkdir(parents=True)
-    test_ip = "192.0.2.1"
-    (extraction_dir / "ips.txt").write_text(test_ip)
-
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    mock_handler = unittest.mock.MagicMock()
-    mock_handler.getDetails.side_effect = ipinfo.exceptions.RequestQuotaExceededError()
-
-    with unittest.mock.patch("ipinfo.getHandler", return_value=mock_handler):
-        with unittest.mock.patch(
-            "s3_log_extraction.ip_utils._update_ip_to_region_codes._get_cidr_address_ranges_and_subregions",
-            return_value=[],
-        ):
-            with pytest.warns(RuntimeWarning, match="IPInfo API request quota exceeded"):
-                s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
-
-    # Only one request should have been attempted; the rest of the run is skipped
-    assert mock_handler.getDetails.call_count == 1
-
-    # The IP must not be cached (e.g., as "undetermined") so that it is retried on the next run
-    ip_to_region_file = tmp_path / "ips" / "ip_to_region.yaml"
-    ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) if ip_to_region_file.exists() else {}
-    assert test_ip not in (ip_to_region or {})
-
-
-@pytest.mark.ai_generated
-def test_update_ip_to_region_codes_saves_progress_before_quota_exceeded(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """IPs resolved before the quota is exhausted are kept in the cache."""
-    extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
-    extraction_dir.mkdir(parents=True)
-    test_ips = ["192.0.2.1", "192.0.2.2"]
-    (extraction_dir / "ips.txt").write_text("\n".join(test_ips))
-
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    success_details = unittest.mock.MagicMock()
-    success_details.details = {"country": "US", "region": "California"}
-
-    mock_handler = unittest.mock.MagicMock()
-    mock_handler.getDetails.side_effect = [success_details, ipinfo.exceptions.RequestQuotaExceededError()]
-
-    with unittest.mock.patch("ipinfo.getHandler", return_value=mock_handler):
-        with unittest.mock.patch(
-            "s3_log_extraction.ip_utils._update_ip_to_region_codes._get_cidr_address_ranges_and_subregions",
-            return_value=[],
-        ):
-            with pytest.warns(RuntimeWarning, match="IPInfo API request quota exceeded"):
-                s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
-
-    ip_to_region_file = tmp_path / "ips" / "ip_to_region.yaml"
-    ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert len(ip_to_region) == 1
-    assert next(iter(ip_to_region.values())) == "US/California"
+# ---------------------------------------------------------------------------
+# IpRegionResolver
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    ("details", "expected_region"),
+    ("country_code", "subdivision_codes", "expected_region"),
     [
-        ({"country": "US", "region": "California"}, "US/California"),
-        ({"country": "US"}, "US"),
-        ({"region": "California"}, "California"),
-        ({"bogon": True}, "bogon"),
-        ({}, None),
+        ("US", ("CA",), "USA/CA"),
+        ("GB", ("ENG", "WSM"), "GBR/ENG"),  # The first-level subdivision is used, not the most specific
+        ("US", (), "USA"),
+        ("XK", ("01",), "XK/01"),  # Kosovo has no ISO 3166-1 alpha-3 code, so the alpha-2 code is kept
+        (None, ("CA",), "unknown"),
+        (None, (), "unknown"),
     ],
 )
-def test_update_ip_to_region_codes_detail_combinations(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    details: dict,
-    expected_region: str | None,
+def test_resolver_maps_geolite2_response_to_region_label(
+    country_code: str | None, subdivision_codes: tuple[str, ...], expected_region: str
 ) -> None:
-    """Each combination of country/region/bogon in the IPInfo response maps to the expected region code."""
-    extraction_dir = tmp_path / "extraction" / "test_dataset" / "test_asset"
-    extraction_dir.mkdir(parents=True)
-    test_ip = "192.0.2.1"
-    (extraction_dir / "ips.txt").write_text(test_ip)
+    """Each combination of country and subdivisions in the GeoLite2 response maps to the expected region label."""
+    test_ip = "8.8.8.8"
+    reader = _make_reader(
+        city_responses={test_ip: _make_city_response(country_code=country_code, subdivision_codes=subdivision_codes)}
+    )
+    resolver = IpRegionResolver(service_networks=_NO_SERVICE_NETWORKS, geolite2_reader=reader)
 
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-
-    mock_details = unittest.mock.MagicMock()
-    mock_details.details = details
-
-    mock_handler = unittest.mock.MagicMock()
-    mock_handler.getDetails.return_value = mock_details
-
-    with unittest.mock.patch("ipinfo.getHandler", return_value=mock_handler):
-        with unittest.mock.patch(
-            "s3_log_extraction.ip_utils._update_ip_to_region_codes._get_cidr_address_ranges_and_subregions",
-            return_value=[],
-        ):
-            s3_log_extraction.ip_utils.update_ip_to_region_codes(cache_directory=tmp_path, use_encryption=False)
-
-    ip_to_region_file = tmp_path / "ips" / "ip_to_region.yaml"
-    ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert ip_to_region[test_ip] == expected_region
+    assert resolver.resolve(test_ip) == expected_region
 
 
 @pytest.mark.ai_generated
-def test_refresh_ip_to_region_codes_handles_ipinfo_quota_exceeded(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """refresh_ip_to_region_codes halts early on quota exhaustion without overwriting existing entries."""
-    test_ips_dir = tmp_path / "ips"
-    test_ips_dir.mkdir(parents=True)
+@pytest.mark.parametrize(
+    ("ip_address", "expected_region"),
+    [
+        ("192.0.2.1", "bogon"),  # RFC 5737 documentation range
+        ("10.0.0.1", "bogon"),  # Private
+        ("127.0.0.1", "bogon"),  # Loopback
+        ("not-an-ip", "unknown"),
+    ],
+)
+def test_resolver_skips_database_for_non_global_addresses(ip_address: str, expected_region: str) -> None:
+    """Non-routable and malformed addresses are classified without consulting the database."""
+    reader = _make_reader(city_responses={})
+    resolver = IpRegionResolver(service_networks=_NO_SERVICE_NETWORKS, geolite2_reader=reader)
 
-    initial_ip_to_region = {"192.0.2.1": "US/California"}
-    ip_to_region_file = test_ips_dir / "ip_to_region.yaml"
-    ip_to_region_file.write_text(yaml.dump(initial_ip_to_region))
+    assert resolver.resolve(ip_address) == expected_region
+    reader.city.assert_not_called()
 
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
 
-    fixed_ordinal_base = datetime.date(2000, 1, 1).toordinal()
-    offset = (-fixed_ordinal_base) % 90
-    fixed_date = datetime.date.fromordinal(fixed_ordinal_base + offset)
+@pytest.mark.ai_generated
+def test_resolver_labels_address_not_in_database_as_unknown() -> None:
+    """A public address the database does not know is labeled unknown, never ``None``, rather than raising."""
+    test_ip = "8.8.8.8"
+    reader = _make_reader(city_responses={test_ip: geoip2.errors.AddressNotFoundError("not found")})
+    resolver = IpRegionResolver(service_networks=_NO_SERVICE_NETWORKS, geolite2_reader=reader)
 
-    def mock_raise_quota_exceeded(ip_address: str, ipinfo_handler: object) -> str:
-        raise ipinfo.exceptions.RequestQuotaExceededError()
+    assert resolver.resolve(test_ip) == "unknown"
+
+
+@pytest.mark.ai_generated
+def test_resolver_known_service_takes_precedence() -> None:
+    """An address inside a known service range is labeled by the service and never geolocated, even a bogon."""
+    reader = _make_reader(city_responses={})
+    service_networks = {
+        "GitHub": [("192.30.252.0/22", None)],
+        "AWS": [("203.0.113.0/24", "us-east-1")],
+        "GCP": [],
+        "VPN": [("198.51.100.0/24", None)],
+    }
+    resolver = IpRegionResolver(service_networks=service_networks, geolite2_reader=reader)
+
+    assert resolver.resolve("203.0.113.7") == "AWS/us-east-1"
+    assert resolver.resolve("192.30.253.1") == "GitHub"
+    assert resolver.resolve("198.51.100.9") == "VPN"
+    reader.city.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_resolver_service_precedence_and_specificity() -> None:
+    """Services are checked in their fixed order, and within a service the most specific range wins."""
+    service_networks = {
+        "GitHub": [],
+        "AWS": [("52.0.0.0/8", "us-east-1"), ("52.94.0.0/16", "eu-west-1")],
+        "GCP": [],
+        "VPN": [("52.94.1.0/24", None)],  # Also lists an AWS address, but AWS is checked first
+    }
+    resolver = IpRegionResolver(service_networks=service_networks, geolite2_reader=_make_reader(city_responses={}))
+
+    assert resolver.resolve("52.1.2.3") == "AWS/us-east-1"
+    assert resolver.resolve("52.94.1.1") == "AWS/eu-west-1"
+
+
+@pytest.mark.ai_generated
+def test_resolver_skips_invalid_service_ranges_with_a_warning() -> None:
+    """A malformed entry in a service listing is skipped with a warning rather than failing every lookup."""
+    service_networks = {
+        "GitHub": [],
+        "AWS": [("not-a-cidr", "us-east-1"), ("203.0.113.0/24", "us-east-1")],
+        "GCP": [],
+        "VPN": [],
+    }
+    resolver = IpRegionResolver(service_networks=service_networks, geolite2_reader=_make_reader(city_responses={}))
+
+    with pytest.warns(UserWarning, match="Skipping invalid CIDR entry 'not-a-cidr'"):
+        assert resolver.resolve("203.0.113.7") == "AWS/us-east-1"
+
+
+@pytest.mark.ai_generated
+def test_resolver_memoizes_and_opens_database_lazily(tmp_path: pathlib.Path) -> None:
+    """The database is opened once, on the first address that needs it, and each address is looked up once."""
+    reader = _make_reader(city_responses={"8.8.8.8": _make_city_response(country_code="US", subdivision_codes=("CA",))})
 
     with unittest.mock.patch(
-        "s3_log_extraction.ip_utils._refresh_ip_to_region_codes._get_region_code_from_ip_address",
-        mock_raise_quota_exceeded,
-    ):
-        with unittest.mock.patch("ipinfo.getHandler"):
-            with pytest.warns(RuntimeWarning, match="IPInfo API request quota exceeded"):
-                s3_log_extraction.ip_utils.refresh_ip_to_region_codes(
-                    cache_directory=tmp_path,
-                    use_encryption=False,
-                    _today=fixed_date,
-                )
+        "s3_log_extraction.ip_utils._resolver.open_geolite2_database", return_value=reader
+    ) as mock_open:
+        with IpRegionResolver(cache_directory=tmp_path, service_networks=_NO_SERVICE_NETWORKS) as resolver:
+            assert resolver.resolve("192.0.2.1") == "bogon"
+            mock_open.assert_not_called()
 
-    # Existing cache entries must remain untouched
-    updated_ip_to_region = yaml.safe_load(ip_to_region_file.read_text()) or {}
-    assert updated_ip_to_region == initial_ip_to_region
+            assert resolver.resolve("8.8.8.8") == "USA/CA"
+            assert resolver.resolve("8.8.8.8") == "USA/CA"
+
+    mock_open.assert_called_once_with(cache_directory=tmp_path)
+    reader.city.assert_called_once_with("8.8.8.8")
+    reader.close.assert_called_once()
 
 
 @pytest.mark.ai_generated
-def test_update_region_code_coordinates_handles_ipinfo_quota_exceeded(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_resolver_does_not_close_a_reader_it_was_given() -> None:
+    """A reader handed in from outside stays open for its owner."""
+    reader = _make_reader(city_responses={})
+    with IpRegionResolver(service_networks=_NO_SERVICE_NETWORKS, geolite2_reader=reader):
+        pass
+    reader.close.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_resolver_pickles_with_service_networks_but_without_reader(tmp_path: pathlib.Path) -> None:
+    """A resolver sent to a worker process carries the service ranges and reopens the database there."""
+    service_networks = {"GitHub": [], "AWS": [("203.0.113.0/24", "us-east-1")], "GCP": [], "VPN": []}
+    reader = _make_reader(city_responses={})
+    resolver = IpRegionResolver(cache_directory=tmp_path, service_networks=service_networks, geolite2_reader=reader)
+
+    unpickled = pickle.loads(pickle.dumps(resolver))
+
+    assert unpickled.service_networks == service_networks
+    assert unpickled.resolve("203.0.113.7") == "AWS/us-east-1"
+    assert unpickled._geolite2_reader is None
+    assert unpickled._cache_directory == tmp_path
+
+
+@pytest.mark.ai_generated
+def test_resolver_fetches_service_networks_on_first_use() -> None:
+    """Without given ranges, the published listings are fetched once, on the first address that needs them."""
+    with unittest.mock.patch(
+        "s3_log_extraction.ip_utils._resolver._get_cidr_address_ranges_and_subregions",
+        side_effect=lambda *, service_name: [("203.0.113.0/24", "us-east-1")] if service_name == "AWS" else [],
+    ) as mock_ranges:
+        resolver = IpRegionResolver(geolite2_reader=_make_reader(city_responses={}))
+        mock_ranges.assert_not_called()
+
+        assert resolver.resolve("203.0.113.7") == "AWS/us-east-1"
+        assert resolver.resolve("203.0.113.8") == "AWS/us-east-1"
+
+    assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == ["AWS", "GCP", "GitHub", "VPN"]
+
+
+@pytest.mark.ai_generated
+def test_mapping_region_resolver() -> None:
+    """A mapping resolver returns the mapped label and ``missing`` for anything else, and satisfies the protocol."""
+    resolver = MappingRegionResolver({"192.0.2.1": "USA/CA", "192.0.2.2": None})
+
+    assert isinstance(resolver, RegionResolver)
+    assert isinstance(IpRegionResolver(service_networks=_NO_SERVICE_NETWORKS), RegionResolver)
+    assert resolver.resolve("192.0.2.1") == "USA/CA"
+    assert resolver.resolve("192.0.2.2") == "missing"
+    assert resolver.resolve("192.0.2.3") == "missing"
+
+
+# ---------------------------------------------------------------------------
+# GeoLite2 database acquisition
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.ai_generated
+def test_update_geolite2_database_requires_credentials(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a cached database and without credentials, the update explains which variables to set."""
+    monkeypatch.delenv("MAXMIND_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("MAXMIND_LICENSE_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY"):
+        update_geolite2_database(cache_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_update_geolite2_database_keeps_fresh_copy(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A recently downloaded database is reused without credentials and without any network access."""
+    monkeypatch.delenv("MAXMIND_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("MAXMIND_LICENSE_KEY", raising=False)
+
+    database_path = tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME
+    database_path.parent.mkdir(parents=True)
+    database_path.write_bytes(b"fresh")
+
+    with unittest.mock.patch("requests.get") as mock_get:
+        assert update_geolite2_database(cache_directory=tmp_path) == database_path
+    mock_get.assert_not_called()
+    assert database_path.read_bytes() == b"fresh"
+
+
+@pytest.mark.ai_generated
+def test_is_database_stale(tmp_path: pathlib.Path) -> None:
+    database_path = tmp_path / GEOLITE2_DATABASE_FILE_NAME
+    database_path.write_bytes(b"")
+    modified = datetime.datetime.fromtimestamp(database_path.stat().st_mtime, tz=datetime.timezone.utc)
+
+    just_under = modified + datetime.timedelta(days=GEOLITE2_MAX_DATABASE_AGE_IN_DAYS, seconds=-1)
+    just_over = modified + datetime.timedelta(days=GEOLITE2_MAX_DATABASE_AGE_IN_DAYS, seconds=1)
+    assert _is_database_stale(database_path=database_path, _now=just_under) is False
+    assert _is_database_stale(database_path=database_path, _now=just_over) is True
+
+
+def _make_geolite2_archive(database_content: bytes) -> bytes:
+    """Build a tarball laid out like MaxMind's: a dated directory containing the .mmdb and license files."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, content in [
+            ("GeoLite2-City_20260901/LICENSE.txt", b"license"),
+            (f"GeoLite2-City_20260901/{GEOLITE2_DATABASE_FILE_NAME}", database_content),
+        ]:
+            member = tarfile.TarInfo(name=name)
+            member.size = len(content)
+            archive.addfile(tarinfo=member, fileobj=io.BytesIO(content))
+    return buffer.getvalue()
+
+
+@pytest.mark.ai_generated
+def test_update_geolite2_database_downloads_and_extracts(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """update_region_code_coordinates saves partial progress instead of crashing when the quota is exhausted."""
-    test_ips_dir = tmp_path / "ips"
-    test_ips_dir.mkdir(parents=True)
-    (test_ips_dir / "ip_to_region.yaml").write_text(yaml.dump({"192.0.2.1": "US/California"}))
+    """The tarball from MaxMind is fetched with basic auth and only the .mmdb inside it is kept."""
+    monkeypatch.setenv("MAXMIND_ACCOUNT_ID", "123456")
+    monkeypatch.setenv("MAXMIND_LICENSE_KEY", "test-license-key")
 
-    monkeypatch.setenv("IPINFO_API_KEY", "test-key-non-remote")
-    monkeypatch.setenv("OPENCAGE_API_KEY", "test-key-non-remote")
+    database_content = b"mmdb-bytes"
+    archive_bytes = _make_geolite2_archive(database_content=database_content)
 
-    mock_geocoder = unittest.mock.MagicMock()
-    mock_geocoder.geocode.side_effect = opencage.geocoder.RateLimitExceededError()
+    mock_response = unittest.mock.MagicMock()
+    mock_response.__enter__.return_value = mock_response
+    mock_response.iter_content.return_value = [archive_bytes[:10], archive_bytes[10:]]
 
-    with unittest.mock.patch("opencage.geocoder.OpenCageGeocode", return_value=mock_geocoder):
-        with unittest.mock.patch("ipinfo.getHandler"):
-            with pytest.warns(RuntimeWarning, match="quota exceeded"):
-                s3_log_extraction.ip_utils.update_region_code_coordinates(
-                    cache_directory=tmp_path, use_encryption=False
-                )
+    with unittest.mock.patch("requests.get", return_value=mock_response) as mock_get:
+        database_path = update_geolite2_database(cache_directory=tmp_path)
 
-    # The run must complete and write the (partial) coordinates cache
-    coordinates_file = test_ips_dir / "region_codes_to_coordinates.yaml"
-    assert coordinates_file.exists()
+    mock_get.assert_called_once()
+    assert mock_get.call_args.kwargs["auth"] == ("123456", "test-license-key")
+    assert mock_get.call_args.kwargs["url"].startswith("https://download.maxmind.com/geoip/databases/GeoLite2-City/")
+    mock_response.raise_for_status.assert_called_once()
+
+    assert database_path == tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME
+    assert database_path.read_bytes() == database_content
+    assert sorted(path.name for path in database_path.parent.iterdir()) == [GEOLITE2_DATABASE_FILE_NAME]
+
+
+@pytest.mark.ai_generated
+def test_update_geolite2_database_reports_maxmind_rejection(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected download surfaces MaxMind's own explanation alongside the HTTP status."""
+    import requests
+
+    monkeypatch.setenv("MAXMIND_ACCOUNT_ID", "123456")
+    monkeypatch.setenv("MAXMIND_LICENSE_KEY", "test-license-key")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.__enter__.return_value = mock_response
+    mock_response.text = '{"code":"AUTHORIZATION_INVALID","error":"A valid license key is required."}'
+    mock_response.raise_for_status.side_effect = requests.HTTPError("401 Client Error: Unauthorized for url: x")
+
+    with unittest.mock.patch("requests.get", return_value=mock_response):
+        with pytest.raises(requests.HTTPError, match=r"401 Client Error.*\nMaxMind said: .*AUTHORIZATION_INVALID"):
+            update_geolite2_database(cache_directory=tmp_path)
+
+    assert not (tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME).exists()
+
+
+@pytest.mark.ai_generated
+def test_update_geolite2_database_force_redownloads_fresh_copy(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MAXMIND_ACCOUNT_ID", "123456")
+    monkeypatch.setenv("MAXMIND_LICENSE_KEY", "test-license-key")
+
+    database_path = tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME
+    database_path.parent.mkdir(parents=True)
+    database_path.write_bytes(b"old")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.__enter__.return_value = mock_response
+    mock_response.iter_content.return_value = [_make_geolite2_archive(database_content=b"new")]
+
+    with unittest.mock.patch("requests.get", return_value=mock_response):
+        update_geolite2_database(cache_directory=tmp_path)
+        assert database_path.read_bytes() == b"old"
+
+        update_geolite2_database(cache_directory=tmp_path, force=True)
+        assert database_path.read_bytes() == b"new"
+
+
+@pytest.mark.ai_generated
+def test_open_geolite2_database_warns_on_stale_copy_without_credentials(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale database that cannot be refreshed is still used, with a warning rather than a failure."""
+    monkeypatch.delenv("MAXMIND_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("MAXMIND_LICENSE_KEY", raising=False)
+
+    database_path = tmp_path / "geolite2" / GEOLITE2_DATABASE_FILE_NAME
+    database_path.parent.mkdir(parents=True)
+    database_path.write_bytes(b"stale")
+
+    with (
+        unittest.mock.patch("s3_log_extraction.ip_utils._geolite2._is_database_stale", return_value=True),
+        unittest.mock.patch("geoip2.database.Reader") as mock_reader,
+    ):
+        with pytest.warns(RuntimeWarning, match="days old but cannot be refreshed"):
+            open_geolite2_database(cache_directory=tmp_path)
+
+    mock_reader.assert_called_once_with(fileish=database_path)
+
+
+# ---------------------------------------------------------------------------
+# ISO 3166 tables and coordinates
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("alpha_2", "expected_alpha_3"),
+    [
+        ("US", "USA"),
+        ("GB", "GBR"),
+        ("de", "DEU"),  # Case-insensitive input
+        ("XK", "XK"),  # Kosovo is outside ISO 3166-1, so there is nothing to convert to
+        ("ZZ", "ZZ"),
+    ],
+)
+def test_country_alpha_2_to_alpha_3(alpha_2: str, expected_alpha_3: str) -> None:
+    assert country_alpha_2_to_alpha_3(alpha_2) == expected_alpha_3
+
+
+@pytest.mark.ai_generated
+def test_get_region_coordinates_known_subdivisions() -> None:
+    """Subdivision points land in the right place, including first-level regions Natural Earth only maps finer."""
+    _assert_within(get_region_coordinates("USA/CA"), _CALIFORNIA_BOX)
+    _assert_within(get_region_coordinates("DEU/BY"), _BAVARIA_BOX)
+    # England has no Natural Earth unit of its own; its point is aggregated from its counties via ISO 3166-2
+    _assert_within(get_region_coordinates("GBR/ENG"), _ENGLAND_BOX)
+
+
+@pytest.mark.ai_generated
+def test_get_region_coordinates_country_fallbacks() -> None:
+    """A bare country label and an unknown subdivision both resolve to the country's point; unknown countries do not."""
+    country_coordinates = get_region_coordinates("USA")
+    _assert_within(country_coordinates, _CONTIGUOUS_US_BOX)
+    assert get_region_coordinates("USA/ZZ") == country_coordinates
+    assert get_region_coordinates("XX/YY") is None
+    assert get_region_coordinates("XX") is None
+
+
+@pytest.mark.ai_generated
+def test_update_region_code_coordinates_locates_published_regions(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Every label of the published by-region summaries is located from the bundled tables; unknown ones reported."""
+    _write_by_region_summary(tmp_path / "summaries" / "ds001" / "by_region.tsv", regions=["USA/CA", "bogon", "XX/YY"])
+    _write_by_region_summary(tmp_path / "summaries" / "archive" / "by_region.tsv", regions=["USA/CA", "AUS", "missing"])
+
+    with unittest.mock.patch("requests.get") as mock_get:
+        s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+    mock_get.assert_not_called()
+
+    coordinates = yaml.safe_load((tmp_path / "ips" / "region_codes_to_coordinates.yaml").read_text())
+    _assert_within(coordinates["USA/CA"], _CALIFORNIA_BOX)
+    assert coordinates["AUS"] == get_region_coordinates("AUS")
+    assert coordinates["bogon"] == {"latitude": None, "longitude": None}
+    assert coordinates["missing"] == {"latitude": None, "longitude": None}
+    assert "XX/YY" not in coordinates
+    assert "XX/YY" in capsys.readouterr().out
+
+
+@pytest.mark.ai_generated
+def test_update_region_code_coordinates_without_summaries(tmp_path: pathlib.Path) -> None:
+    """With no by-region summary published yet, only the default entries are written."""
+    s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+
+    coordinates = yaml.safe_load((tmp_path / "ips" / "region_codes_to_coordinates.yaml").read_text())
+    assert set(coordinates.keys()) == set(s3_log_extraction.ip_utils._globals._DEFAULT_REGION_CODES_TO_COORDINATES)
+
+
+@pytest.mark.ai_generated
+def test_update_region_code_coordinates_locates_services_with_geolite2(tmp_path: pathlib.Path) -> None:
+    """Cloud service regions are located by geolocating an address from their range, once, not from the tables."""
+    _write_by_region_summary(tmp_path / "summaries" / "ds001" / "by_region.tsv", regions=["AWS/us-west-2", "GitHub"])
+
+    reader = _make_reader(city_responses={"52.0.0.0": _make_city_response(latitude=45.8399, longitude=-119.7006)})
+
+    with unittest.mock.patch(
+        "s3_log_extraction.ip_utils._update_region_code_coordinates.open_geolite2_database", return_value=reader
+    ) as mock_open:
+        with unittest.mock.patch(
+            "s3_log_extraction.ip_utils._update_region_code_coordinates._get_cidr_address_ranges_and_subregions",
+            return_value=[("52.0.0.0/8", "us-west-2")],
+        ):
+            s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+
+            # A second run finds the region already located and does not open the database again
+            s3_log_extraction.ip_utils.update_region_code_coordinates(cache_directory=tmp_path, use_encryption=False)
+
+    mock_open.assert_called_once()
+    reader.close.assert_called_once()
+
+    coordinates = yaml.safe_load((tmp_path / "ips" / "region_codes_to_coordinates.yaml").read_text())
+    assert coordinates["AWS/us-west-2"] == {"latitude": 45.8399, "longitude": -119.7006}
+    assert coordinates["GitHub"] == {"latitude": None, "longitude": None}

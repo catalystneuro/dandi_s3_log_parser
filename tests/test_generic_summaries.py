@@ -2,12 +2,15 @@ import json
 import pathlib
 import secrets
 import shutil
+import unittest.mock
 
+import geoip2.errors
 import pandas
 import py
 import pytest
 
 import s3_log_extraction
+from s3_log_extraction.ip_utils import MappingRegionResolver
 
 # A view is a maximal run of streaming requests from one IP to one asset separated by no more than 8 hours.
 # The timestamps below are all on 2025-01-01 unless noted, written in the extraction cache's YYMMDDHHmmss format.
@@ -42,32 +45,19 @@ def _write_asset(
     )
 
 
-def _write_ip_to_region_cache(*, cache_directory: pathlib.Path, ip_to_region: dict[str, str]) -> None:
-    """Write the ``ip_to_region`` cache that summaries geolocate their requesters with."""
-    ip_cache_directory = cache_directory / "ips"
-    ip_cache_directory.mkdir(parents=True, exist_ok=True)
-    (ip_cache_directory / "ip_to_region.yaml").write_text(
-        "\n".join(f"{ip}: {region}" for ip, region in ip_to_region.items()) + "\n"
-    )
-
-
-def _write_asset_spanning_regions(
-    *, asset_directory: pathlib.Path, cache_directory: pathlib.Path, regions: list[str]
-) -> None:
+def _write_asset_spanning_regions(*, asset_directory: pathlib.Path, regions: list[str]) -> MappingRegionResolver:
     """
     Write an asset streamed once from each of the given regions, by a distinct requester per region.
 
-    The requesters are drawn from the TEST-NET-1 documentation range.
+    The requesters are drawn from the TEST-NET-1 documentation range, and the returned resolver stands in for a
+    geolocation of them to the given regions.
     """
     requests = [(f"2501010000{index:02d}", _STREAMING, f"192.0.2.{index}") for index in range(len(regions))]
     _write_asset(asset_directory=asset_directory, requests=requests)
-    _write_ip_to_region_cache(
-        cache_directory=cache_directory,
-        ip_to_region={f"192.0.2.{index}": region for index, region in enumerate(regions)},
-    )
+    return MappingRegionResolver({f"192.0.2.{index}": region for index, region in enumerate(regions)})
 
 
-def test_generic_summaries(tmpdir: py.path.local):
+def test_generic_summaries(tmpdir: py.path.local, mocked_region_resolver: MappingRegionResolver):
     test_dir = pathlib.Path(tmpdir)
 
     base_tests_dir = pathlib.Path(__file__).parent
@@ -78,11 +68,12 @@ def test_generic_summaries(tmpdir: py.path.local):
     test_extraction_dir = test_dir / "extraction"
     test_summary_dir = test_dir / "summaries"
     shutil.copytree(src=expected_extraction_dir, dst=test_extraction_dir)
-    # Every requester of the example logs is a documentation-range address, which a real geolocation resolves
-    # to `bogon`; the mocked cache stands in for one so that the summaries have regions to report
-    shutil.copytree(src=base_tests_dir / "mocked_ips", dst=test_dir / "ips")
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    # Every requester of the example logs is a documentation-range address, which a real resolution labels
+    # `bogon`; the mocked resolver stands in for one so that the summaries have regions to report
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=mocked_region_resolver
+    )
     s3_log_extraction.summarize.generate_all_dataset_totals(cache_directory=test_dir)
     s3_log_extraction.summarize.generate_archive_summaries(cache_directory=test_dir)
     s3_log_extraction.summarize.generate_archive_totals(cache_directory=test_dir)
@@ -270,6 +261,29 @@ def test_totals_count_regions_only_from_a_published_by_region_summary(tmpdir: py
     assert totals["ds001"]["number_of_unique_countries"] == 0
     assert totals["ds002"]["number_of_unique_regions"] == 3
     assert totals["ds002"]["number_of_unique_countries"] == 2  # "missing" names no country
+
+
+@pytest.mark.ai_generated
+def test_totals_count_an_aws_region_and_its_country_once(tmpdir: py.path.local) -> None:
+    """An AWS region is attributed to the alpha-3 code of its country, so it does not add a second country."""
+    test_dir = pathlib.Path(tmpdir)
+    dataset_dir = test_dir / "summaries" / "ds001"
+    dataset_dir.mkdir(parents=True)
+    (dataset_dir / "by_day.tsv").write_text(
+        "date\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\n2026-01-01\t10\t4\t3\n"
+    )
+    (dataset_dir / "by_region.tsv").write_text(
+        "region\tbytes_sent\tnumber_of_requests\tnumber_of_downloads\n"
+        "USA/CA\t4\t2\t1\n"
+        "AWS/us-east-1\t4\t1\t1\n"
+        "DEU/BE\t2\t1\t1\n"
+    )
+
+    s3_log_extraction.summarize.generate_all_dataset_totals(cache_directory=test_dir)
+
+    totals = json.loads((test_dir / "summaries" / "totals.json").read_text())
+    assert totals["ds001"]["number_of_unique_regions"] == 3
+    assert totals["ds001"]["number_of_unique_countries"] == 2  # USA (twice) and DEU
 
 
 @pytest.mark.ai_generated
@@ -462,9 +476,11 @@ def test_generate_archive_summaries_accepts_custom_asset_type_order(tmpdir: py.p
         # Neither do services whose region was never reported
         ("GitHub", False),
         ("VPN", False),
+        # Nor a ``None`` entry left in the cache by earlier versions
+        (None, False),
     ],
 )
-def test_is_resolved_region(region_label: str, expected: bool) -> None:
+def test_is_resolved_region(region_label: str | None, expected: bool) -> None:
     """Only labels that name a place, which is to say the ones carrying a slash, are resolved regions."""
     from s3_log_extraction.ip_utils import is_resolved_region
 
@@ -489,9 +505,11 @@ def test_is_resolved_region(region_label: str, expected: bool) -> None:
         ("bogon", False),
         # Genuine geographic labels are not excluded
         ("US/California", False),
+        # A ``None`` entry left in the cache by earlier versions is an unresolved location, not a service
+        (None, False),
     ],
 )
-def test_is_cloud_service_or_vpn_label(region_label: str, expected: bool) -> None:
+def test_is_cloud_service_or_vpn_label(region_label: str | None, expected: bool) -> None:
     """Only genuine cloud/VPN service labels are excluded; unresolved-location labels are not."""
     from s3_log_extraction.ip_utils import is_cloud_service_or_vpn_label
 
@@ -511,13 +529,72 @@ def test_is_cloud_service_or_vpn_label(region_label: str, expected: bool) -> Non
         ("VPN", False),
         ("US/California", False),
         ("missing", False),
+        # A ``None`` label is not GitHub Actions
+        (None, False),
     ],
 )
-def test_is_github_actions_label(region_label: str, expected: bool) -> None:
+def test_is_github_actions_label(region_label: str | None, expected: bool) -> None:
     """Only the GitHub Actions runner label is flagged; the broader GitHub label is not."""
     from s3_log_extraction.ip_utils import is_github_actions_label
 
     assert is_github_actions_label(region_label) == expected
+
+
+@pytest.mark.ai_generated
+def test_summaries_geolocate_requesters_while_summarizing(tmpdir: py.path.local) -> None:
+    """
+    Requesters are resolved during the summary run, against the service ranges and the GeoLite2 database.
+
+    Nothing about any requester's location is written to disk other than the aggregated by-region summary.
+    """
+    test_dir = pathlib.Path(tmpdir)
+    _write_asset(
+        asset_directory=test_dir / "extraction" / "ds001" / "asset",
+        requests=[
+            ("250101000000", _DOWNLOAD, "8.8.8.8"),  # Geolocated
+            ("250101000001", _STREAMING, "1.1.1.1"),  # In the database without a subdivision
+            ("250101000002", _STREAMING, "9.9.9.9"),  # Not in the database
+            ("250101000003", _STREAMING, "203.0.113.7"),  # In a cloud service range, so never geolocated
+            ("250101000004", _STREAMING, "192.0.2.1"),  # Not publicly routable
+        ],
+    )
+
+    city_responses = {
+        "8.8.8.8": unittest.mock.MagicMock(
+            country=unittest.mock.MagicMock(iso_code="US"), subdivisions=[unittest.mock.MagicMock(iso_code="CA")]
+        ),
+        "1.1.1.1": unittest.mock.MagicMock(country=unittest.mock.MagicMock(iso_code="AU"), subdivisions=[]),
+        "9.9.9.9": geoip2.errors.AddressNotFoundError("not found"),
+    }
+
+    def city(ip_address: str) -> object:
+        response = city_responses[ip_address]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    reader = unittest.mock.MagicMock()
+    reader.city.side_effect = city
+    service_networks = {"GitHub": [], "AWS": [("203.0.113.0/24", "us-east-1")], "GCP": [], "VPN": []}
+
+    with unittest.mock.patch("s3_log_extraction.ip_utils._resolver.open_geolite2_database", return_value=reader):
+        with unittest.mock.patch(
+            "s3_log_extraction.ip_utils._resolver.fetch_service_networks", return_value=service_networks
+        ):
+            # A threshold of zero publishes the by-region summary as soon as one resolved region is updated
+            s3_log_extraction.summarize.generate_summaries(
+                cache_directory=test_dir, use_encryption=False, region_disclosure_threshold=0
+            )
+
+    by_region = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_region.tsv", index_col=0)
+    assert sorted(by_region.index) == ["AUS", "AWS/us-east-1", "USA/CA", "bogon", "unknown"]
+    assert by_region.loc["USA/CA", "number_of_downloads"] == 1
+    assert by_region.loc["AUS", "number_of_views"] == 1
+    # The cloud service requester is not a requester, and the database was never asked about it
+    assert (test_dir / "summaries" / "ds001" / "requester_count.tsv").read_text().strip() == "4"
+    assert sorted(call.args[0] for call in reader.city.call_args_list) == ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
+    reader.close.assert_called_once()
+    assert not (test_dir / "ips").exists()
 
 
 @pytest.mark.ai_generated
@@ -529,16 +606,20 @@ def test_collect_unique_ips_excludes_known_cloud_service_ips(tmpdir: py.path.loc
     asset_dir.mkdir(parents=True, exist_ok=True)
     (asset_dir / "ips.txt").write_text("1.2.3.4\n5.6.7.8\n9.10.11.12\n13.14.15.16\n17.18.19.20\n21.22.23.24\n")
 
-    ip_to_region = {
-        "1.2.3.4": "US/California",
-        "5.6.7.8": "GitHub",
-        "9.10.11.12": "AWS/us-east-1",
-        "13.14.15.16": "VPN",
-        "17.18.19.20": "bogon",
-        "21.22.23.24": "unknown",
-    }
+    region_resolver = MappingRegionResolver(
+        {
+            "1.2.3.4": "US/California",
+            "5.6.7.8": "GitHub",
+            "9.10.11.12": "AWS/us-east-1",
+            "13.14.15.16": "VPN",
+            "17.18.19.20": "bogon",
+            "21.22.23.24": "unknown",
+        }
+    )
 
-    unique_ips = _collect_unique_ips(asset_directories=[asset_dir], use_encryption=False, ip_to_region=ip_to_region)
+    unique_ips = _collect_unique_ips(
+        asset_directories=[asset_dir], use_encryption=False, region_resolver=region_resolver
+    )
 
     assert unique_ips == {"1.2.3.4", "17.18.19.20", "21.22.23.24"}
 
@@ -554,13 +635,15 @@ def test_summarize_dataset_requester_count_excludes_known_cloud_service_ips(tmpd
     cloud_ips = [f"192.168.0.{index}" for index in range(60)]
     (asset_dir / "ips.txt").write_text("\n".join(real_ips + cloud_ips))
 
-    ip_to_region = {ip: "US/California" for ip in real_ips} | {ip: "GitHub" for ip in cloud_ips}
+    region_resolver = MappingRegionResolver(
+        {ip: "US/California" for ip in real_ips} | {ip: "GitHub" for ip in cloud_ips}
+    )
 
     summary_file_path = pathlib.Path(tmpdir) / "requester_count.tsv"
     _summarize_dataset_requester_count(
         asset_directories=[asset_dir],
         summary_file_path=summary_file_path,
-        ip_to_region=ip_to_region,
+        region_resolver=region_resolver,
         use_encryption=False,
     )
 
@@ -731,17 +814,19 @@ def test_collect_asset_views_excludes_github_actions(tmpdir: py.path.local) -> N
             ("250101000000", _STREAMING, "203.0.113.0"),  # other GitHub range, e.g. Codespaces (kept)
         ],
     )
-    ip_to_region = {
-        "192.0.2.0": "US/California",
-        "198.51.100.0": "GH-actions",
-        "203.0.113.0": "GitHub",
-    }
+    region_resolver = MappingRegionResolver(
+        {
+            "192.0.2.0": "US/California",
+            "198.51.100.0": "GH-actions",
+            "203.0.113.0": "GitHub",
+        }
+    )
 
-    # Without the mapping, every IP is counted (the default, exclusion-free behavior)
+    # Without a resolver, every IP is counted (the default, exclusion-free behavior)
     assert len(_collect_asset_views(asset_directory=asset_directory, use_encryption=False)) == 3
 
-    # With the mapping, only the GitHub Actions view is dropped; the Codespaces-style GitHub view remains
-    views = _collect_asset_views(asset_directory=asset_directory, use_encryption=False, ip_to_region=ip_to_region)
+    # With the resolver, only the GitHub Actions view is dropped; the Codespaces-style GitHub view remains
+    views = _collect_asset_views(asset_directory=asset_directory, use_encryption=False, region_resolver=region_resolver)
     assert sorted(ip for _, ip in views) == ["192.0.2.0", "203.0.113.0"]
 
 
@@ -766,7 +851,9 @@ def test_summaries_report_true_number_of_views(tmpdir: py.path.local) -> None:
         ],
     )
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=MappingRegionResolver({})
+    )
 
     by_asset = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_asset.tsv", index_col=0)
     assert by_asset.columns.tolist() == ["bytes_sent", "number_of_requests", "number_of_downloads", "number_of_views"]
@@ -795,7 +882,9 @@ def test_summaries_count_views_with_encryption(tmpdir: py.path.local, monkeypatc
         )
     _write_asset(asset_directory=asset_directory, requests=requests, use_encryption=True)
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=True)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=True, region_resolver=MappingRegionResolver({})
+    )
 
     by_asset = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_asset.tsv", index_col=0)
     assert by_asset.loc["encrypted.nwb", "number_of_views"] == 60
@@ -820,9 +909,10 @@ def test_view_counts_roll_up_to_dataset_and_archive_totals(tmpdir: py.path.local
             requests=[(f"2501010000{index:02d}", _STREAMING, f"{subnet}.{index}") for index in range(60)],
         )
         ip_to_region.update({f"{subnet}.{index}": f"US/Subdivision {index % 10}" for index in range(60)})
-    _write_ip_to_region_cache(cache_directory=test_dir, ip_to_region=ip_to_region)
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=MappingRegionResolver(ip_to_region)
+    )
     s3_log_extraction.summarize.generate_all_dataset_totals(cache_directory=test_dir)
     s3_log_extraction.summarize.generate_archive_summaries(cache_directory=test_dir)
     s3_log_extraction.summarize.generate_archive_totals(cache_directory=test_dir)
@@ -867,7 +957,9 @@ def test_views_are_counted_on_the_day_the_session_began(tmpdir: py.path.local) -
         )
     _write_asset(asset_directory=test_dir / "extraction" / "ds001" / "straddling.nwb", requests=requests)
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=MappingRegionResolver({})
+    )
 
     by_day = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_day.tsv", index_col=0)
     assert by_day.loc["2025-01-01", "number_of_views"] == 60
@@ -889,14 +981,13 @@ def test_views_are_attributed_to_the_region_of_their_requester(tmpdir: py.path.l
         ],
     )
 
-    _write_ip_to_region_cache(
-        cache_directory=test_dir,
-        ip_to_region={ip: "US/California" for ip in californian_ips} | {ip: "DE/Berlin" for ip in berliner_ips},
+    region_resolver = MappingRegionResolver(
+        {ip: "US/California" for ip in californian_ips} | {ip: "DE/Berlin" for ip in berliner_ips}
     )
 
     # Two regions is below the default disclosure threshold, which this test is not about
     s3_log_extraction.summarize.generate_summaries(
-        cache_directory=test_dir, use_encryption=False, region_disclosure_threshold=1
+        cache_directory=test_dir, use_encryption=False, region_disclosure_threshold=1, region_resolver=region_resolver
     )
 
     by_region = pandas.read_table(filepath_or_buffer=test_dir / "summaries" / "ds001" / "by_region.tsv", index_col=0)
@@ -949,13 +1040,14 @@ def test_by_region_summary_is_published_only_above_the_disclosure_threshold(
     """A by-region summary is created only once its first update spans more regions than the threshold."""
     test_dir = pathlib.Path(tmpdir)
 
-    _write_asset_spanning_regions(
+    region_resolver = _write_asset_spanning_regions(
         asset_directory=test_dir / "extraction" / "ds001" / "asset.nwb",
-        cache_directory=test_dir,
         regions=[f"US/Subdivision {index}" for index in range(number_of_regions)],
     )
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
+    )
 
     summary_directory = test_dir / "summaries" / "ds001"
     assert (summary_directory / "by_region.tsv").exists() == expected_to_be_published
@@ -970,13 +1062,14 @@ def test_unresolved_region_labels_do_not_count_toward_the_disclosure_threshold(t
     """Labels that name no place cannot make up the regions an update needs to be published."""
     test_dir = pathlib.Path(tmpdir)
 
-    _write_asset_spanning_regions(
+    region_resolver = _write_asset_spanning_regions(
         asset_directory=test_dir / "extraction" / "ds001" / "asset.nwb",
-        cache_directory=test_dir,
         regions=["unknown", "undetermined", "missing", "bogon", "GitHub", "VPN", "US/California"],
     )
 
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
+    )
 
     assert not (test_dir / "summaries" / "ds001" / "by_region.tsv").exists()
 
@@ -989,16 +1082,18 @@ def test_by_region_summary_is_not_updated_by_a_small_change(tmpdir: py.path.loca
     summary_file_path = test_dir / "summaries" / "ds001" / "by_region.tsv"
 
     regions = [f"US/Subdivision {index}" for index in range(10)]
-    _write_asset_spanning_regions(asset_directory=asset_directory, cache_directory=test_dir, regions=regions)
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    region_resolver = _write_asset_spanning_regions(asset_directory=asset_directory, regions=regions)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
+    )
 
     published = summary_file_path.read_text()
 
     # Two more requests from two of the regions already published, which is too small an update to disclose
-    _write_asset_spanning_regions(
-        asset_directory=asset_directory, cache_directory=test_dir, regions=[*regions, *regions[:2]]
+    region_resolver = _write_asset_spanning_regions(asset_directory=asset_directory, regions=[*regions, *regions[:2]])
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
     )
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
 
     assert summary_file_path.read_text() == published
 
@@ -1015,14 +1110,16 @@ def test_by_region_summary_is_updated_by_a_change_across_enough_regions(tmpdir: 
     summary_file_path = test_dir / "summaries" / "ds001" / "by_region.tsv"
 
     regions = [f"US/Subdivision {index}" for index in range(10)]
-    _write_asset_spanning_regions(asset_directory=asset_directory, cache_directory=test_dir, regions=regions)
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
+    region_resolver = _write_asset_spanning_regions(asset_directory=asset_directory, regions=regions)
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
+    )
 
     # Six of the ten regions request again, which is more than the threshold of five
-    _write_asset_spanning_regions(
-        asset_directory=asset_directory, cache_directory=test_dir, regions=[*regions, *regions[:6]]
+    region_resolver = _write_asset_spanning_regions(asset_directory=asset_directory, regions=[*regions, *regions[:6]])
+    s3_log_extraction.summarize.generate_summaries(
+        cache_directory=test_dir, use_encryption=False, region_resolver=region_resolver
     )
-    s3_log_extraction.summarize.generate_summaries(cache_directory=test_dir, use_encryption=False)
 
     by_region = pandas.read_table(filepath_or_buffer=summary_file_path, index_col=0)
     assert by_region["number_of_requests"].sum() == 16

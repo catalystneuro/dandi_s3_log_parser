@@ -1,15 +1,26 @@
-import os
 import pathlib
-import warnings
 
 import natsort
+import pandas
 import tqdm
-import yaml
 
+from ._geolite2 import open_geolite2_database
 from ._globals import _DEFAULT_REGION_CODES_TO_COORDINATES, _KNOWN_SERVICES
 from ._ip_cache import load_ip_cache, write_ip_cache
 from ._ip_utils import _get_cidr_address_ranges_and_subregions
+from ._region_codes import get_region_coordinates
 from ..config import get_cache_subdirectory
+
+
+def _collect_published_region_codes(*, cache_directory: str | pathlib.Path | None = None) -> set[str]:
+    """Collect every region label that appears in a published ``by_region.tsv`` summary, per dataset or archive-wide."""
+    summary_directory = get_cache_subdirectory(cache_directory=cache_directory, name="summaries")
+
+    region_codes: set[str] = set()
+    for summary_file_path in summary_directory.rglob(pattern="by_region.tsv"):
+        summary_table = pandas.read_table(filepath_or_buffer=summary_file_path, usecols=["region"])
+        region_codes.update(str(region) for region in summary_table["region"])
+    return region_codes
 
 
 def update_region_code_coordinates(
@@ -19,93 +30,55 @@ def update_region_code_coordinates(
     """
     Update the `region_codes_to_coordinates.yaml` file in the cache directory.
 
+    Every region label of the published ``by_region.tsv`` summaries that has no coordinates yet is located. Geographic
+    labels (``"USA/CA"``) are looked up in the ISO 3166 coordinate tables shipped with the package, and cloud service
+    regions (``"AWS/us-east-1"``) are located with the GeoLite2 database. No web API is involved, and the database is
+    only opened when a cloud service region is new.
+
     Parameters
     ----------
     cache_directory : str | pathlib.Path | None
         Path to the cache directory.
         If `None`, the default cache directory will be used.
     use_encryption : bool
-        If ``True`` (default), IP cache files are decrypted when reading and encrypted when writing.
-        If ``False``, IP cache files are read and written as plaintext.
+        If ``True`` (default), the coordinates file is decrypted when read and encrypted when written.
+        If ``False``, it is read and written as plaintext.
     """
-    import ipinfo
-    import opencage.geocoder
-
-    opencage_api_key = os.environ.get("OPENCAGE_API_KEY", None)
-    ipinfo_api_key = os.environ.get("IPINFO_API_KEY", None)
-
-    api_keys = {"OPENCAGE_API_KEY": opencage_api_key, "IPINFO_API_KEY": ipinfo_api_key}
-    for environment_variable_name, api_key in api_keys.items():
-        if api_key is None:
-            message = f"`{environment_variable_name}` environment variable is not set."
-            raise ValueError(message)
-    ipinfo_client = ipinfo.getHandler(access_token=ipinfo_api_key)
-    opencage_client = opencage.geocoder.OpenCageGeocode(key=opencage_api_key)
-
-    ip_cache_directory = get_cache_subdirectory(cache_directory=cache_directory, name="ips")
-
-    ip_to_region_codes_file_path = ip_cache_directory / "ip_to_region.yaml"
-    if not ip_to_region_codes_file_path.exists():
-        message = (
-            f"\nCannot update region codes to coordinates because the IP to region file does not exist: "
-            f"{ip_to_region_codes_file_path}\n\n"
-            f"Please run `s3logextraction update ip regions` first to create the IP to region file.\n"
-        )
-        raise FileNotFoundError(message)
-
-    service_coordinates_file_path = ip_cache_directory / "service_coordinates.yaml"
-    if not service_coordinates_file_path.exists():
-        service_coordinates_file_path.touch()
-    with service_coordinates_file_path.open(mode="r") as file_stream:
-        service_coordinates = yaml.safe_load(stream=file_stream) or {}
-
-    region_codes_to_coordinates: dict[str, dict[str, float]] = _DEFAULT_REGION_CODES_TO_COORDINATES
+    region_codes_to_coordinates: dict[str, dict[str, float]] = dict(_DEFAULT_REGION_CODES_TO_COORDINATES)
     previous_region_codes_to_coordinates = load_ip_cache(
         cache_type="region_codes_to_coordinates", cache_directory=cache_directory, use_encryption=use_encryption
     )
     region_codes_to_coordinates.update(previous_region_codes_to_coordinates)
 
-    ip_to_region = load_ip_cache(
-        cache_type="ip_to_region", cache_directory=cache_directory, use_encryption=use_encryption
-    )
-    quota_exceeded_exceptions = (
-        ipinfo.exceptions.RequestQuotaExceededError,
-        opencage.geocoder.RateLimitExceededError,
-    )
-    region_codes_to_update = set(ip_to_region.values()) - set(region_codes_to_coordinates.keys())
-    opencage_failures = []
-    for country_and_region_code in tqdm.tqdm(
-        iterable=region_codes_to_update,
-        total=len(region_codes_to_update),
-        desc="Updating region coordinates",
-        smoothing=0,
-        unit="regions",
-    ):
-        # Bogon IPs do not have coordinates, so skip
-        if country_and_region_code == "bogon":
-            continue
+    published_region_codes = _collect_published_region_codes(cache_directory=cache_directory)
+    region_codes_to_update = published_region_codes - set(region_codes_to_coordinates.keys())
+    unresolved_region_codes = []
+    geolite2_reader = None
+    try:
+        for country_and_region_code in tqdm.tqdm(
+            iterable=region_codes_to_update,
+            total=len(region_codes_to_update),
+            desc="Updating region coordinates",
+            smoothing=0,
+            unit="regions",
+        ):
+            service_name = country_and_region_code.split("/")[0]
+            if service_name in _KNOWN_SERVICES:
+                if geolite2_reader is None:
+                    geolite2_reader = open_geolite2_database(cache_directory=cache_directory)
+                coordinates = _get_service_coordinates_from_geolite2(
+                    country_and_region_code=country_and_region_code, geolite2_reader=geolite2_reader
+                )
+            else:
+                coordinates = get_region_coordinates(country_and_region_code)
 
-        try:
-            coordinates = _get_coordinates_from_region_code(
-                country_and_region_code=country_and_region_code,
-                ipinfo_client=ipinfo_client,
-                opencage_client=opencage_client,
-                service_coordinates=service_coordinates,
-                opencage_failures=opencage_failures,
-            )
-        except quota_exceeded_exceptions:
-            warnings.warn(
-                message=(
-                    "API request quota exceeded. Halting the coordinates update early; "
-                    "progress so far is saved and remaining region codes will be retried on the next run."
-                ),
-                category=RuntimeWarning,
-                stacklevel=2,
-            )
-            break
-
-        if coordinates is not None:
-            region_codes_to_coordinates[country_and_region_code] = coordinates
+            if coordinates is not None:
+                region_codes_to_coordinates[country_and_region_code] = coordinates
+            else:
+                unresolved_region_codes.append(country_and_region_code)
+    finally:
+        if geolite2_reader is not None:
+            geolite2_reader.close()
 
     region_codes_to_coordinates_ordered = {
         key: region_codes_to_coordinates[key] for key in natsort.natsorted(seq=region_codes_to_coordinates.keys())
@@ -117,107 +90,42 @@ def update_region_code_coordinates(
         cache_directory=cache_directory,
         use_encryption=use_encryption,
     )
-    with service_coordinates_file_path.open(mode="w") as file_stream:
-        yaml.dump(data=service_coordinates, stream=file_stream)
 
-    if any(opencage_failures):
+    if any(unresolved_region_codes):
         message = (
-            f"\nThe following region codes could not be resolved using the OpenCage API:\n"
-            f"{', '.join(opencage_failures)}\n\n"
+            f"\nThe following region codes have no known coordinates:\n"
+            f"{', '.join(natsort.natsorted(unresolved_region_codes))}\n\n"
         )
         print(message)
 
 
-def _get_coordinates_from_region_code(
+def _get_service_coordinates_from_geolite2(
     *,
     country_and_region_code: str,
-    ipinfo_client: "ipinfo.Handler",
-    opencage_client: "opencage.geocoder.OpenCageGeocode",
-    service_coordinates: dict[str, dict[str, float]],
-    opencage_failures: list[str],
-) -> dict[str, float]:
+    geolite2_reader: "geoip2.database.Reader",
+) -> dict[str, float] | None:
     """
-    Get the coordinates for a region code.
+    Locate a cloud service region (e.g. ``"AWS/us-east-1"``) by geolocating the first IP of one of its CIDR ranges.
 
-    May be from either a cloud region (e.g., "AWS/us-east-1") or a country/region code (e.g., "US/California").
-
-    Parameters
-    ----------
-    country_and_region_code : str
-        The region code to get the coordinates for.
-    ipinfo_client : ipinfo.Handler
-        The IPInfo handler to use for fetching coordinates.
-    opencage_api_key : str
-        The OpenCage API key.
-    service_coordinates : dict[str, dict[str, float]]
-        A dictionary containing the coordinates of known services.
-
-    Returns
-    -------
-    dict[str, float]
-        A dictionary containing the latitude and longitude of the region code.
+    A service label without a region (``"GitHub"``, ``"VPN"``) names no place and is handled by the defaults.
     """
-    country_code = country_and_region_code.split("/")[0]
-    if country_code in _KNOWN_SERVICES:
-        coordinates = _get_service_coordinates_from_ipinfo(
-            country_and_region_code=country_and_region_code,
-            ipinfo_client=ipinfo_client,
-            service_coordinates=service_coordinates,
-        )
-    else:
-        coordinates = _get_coordinates_from_opencage(
-            country_and_region_code=country_and_region_code,
-            opencage_client=opencage_client,
-            opencage_failures=opencage_failures,
-        )
+    import geoip2.errors
 
-    return coordinates
-
-
-def _get_service_coordinates_from_ipinfo(
-    *,
-    country_and_region_code: str,
-    ipinfo_client: "ipinfo.Handler",
-    service_coordinates: dict[str, dict[str, float]],
-) -> dict[str, float]:
-    # Note that services with a single code (e.g., "GitHub") should be handled via the global default dictionary
-    service_name, subregion = country_and_region_code.split("/")
-
-    coordinates = service_coordinates.get(service_name, None)
-    if coordinates is not None:
-        return coordinates
+    service_name, _, subregion = country_and_region_code.partition("/")
+    if not subregion:
+        return None
 
     cidr_addresses_and_subregions = _get_cidr_address_ranges_and_subregions(service_name=service_name)
     subregion_to_cidr_address = {subregion: cidr_address for cidr_address, subregion in cidr_addresses_and_subregions}
+    if subregion not in subregion_to_cidr_address:
+        return None
 
     ip_address = subregion_to_cidr_address[subregion].split("/")[0]
-    details = ipinfo_client.getDetails(ip_address=ip_address).details
-    latitude = details["latitude"]
-    longitude = details["longitude"]
-    coordinates = {"latitude": latitude, "longitude": longitude}
+    try:
+        location = geolite2_reader.city(ip_address).location
+    except geoip2.errors.AddressNotFoundError:
+        return None
+    if location.latitude is None or location.longitude is None:
+        return None
 
-    service_coordinates[country_and_region_code] = coordinates
-
-    return coordinates
-
-
-def _get_coordinates_from_opencage(
-    *, country_and_region_code: str, opencage_client: "opencage.geocoder.OpenCageGeocode", opencage_failures: list[str]
-) -> dict[str, float]:
-    """
-    Use the OpenCage API to get the coordinates (in decimal degrees form) for a ISO 3166 country/region code.
-
-    Note that multiple results might be returned by the query, and some may not correctly correspond to the country.
-    Also note that the order of latitude and longitude are reversed in the response, which is corrected in this output.
-    """
-    results = opencage_client.geocode(country_and_region_code)
-
-    if not any(results):
-        opencage_failures.append(country_and_region_code)
-        return
-
-    latitude = results[0]["geometry"]["lat"]
-    longitude = results[0]["geometry"]["lng"]
-    coordinates = {"latitude": latitude, "longitude": longitude}
-
-    return coordinates
+    return {"latitude": location.latitude, "longitude": location.longitude}

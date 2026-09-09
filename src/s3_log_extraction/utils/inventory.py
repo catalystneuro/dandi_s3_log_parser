@@ -5,8 +5,8 @@ import json
 import pathlib
 import typing
 
-from ..ip_utils._ip_cache import load_ip_cache
 from ..ip_utils._ip_utils import _read_ips_from_file
+from ..ip_utils._resolver import IpRegionResolver, RegionResolver
 
 
 class LogBucketStats(typing.TypedDict):
@@ -60,26 +60,17 @@ class IpCategoryCount(typing.TypedDict):
 
 
 class IpStats(typing.TypedDict):
-    """Statistics comparing extracted IPs against the ip_to_region classification cache.
+    """Classification statistics of the IP addresses in the extraction cache.
 
     Attributes
     ----------
     extracted_ip_count : int
         Number of unique IP addresses found across all ``ips.txt`` files in the
         extraction cache.
-    classified_ip_count : int
-        Number of IP addresses present in the ``ip_to_region.yaml`` cache.
-    percent_classified : float
-        ``classified_ip_count / extracted_ip_count * 100`` (or ``0.0`` when
-        ``extracted_ip_count`` is zero).
     determined : IpCategoryCount
-        IPs mapped to a concrete geographic region (country/region string).
-    missing : IpCategoryCount
-        IPs in the ``ip_to_region`` cache with no region resolved (``None``).
+        IPs resolved to a geographic region (``"USA/CA"``) or a country (``"USA"``).
     unknown : IpCategoryCount
-        IPs where the lookup returned an unexpected error (``"unknown"``).
-    undetermined : IpCategoryCount
-        IPs where the lookup hit API quota limits (``"undetermined"``).
+        IPs that are malformed, absent from the GeoLite2 database, or without a country there (``"unknown"``).
     bogon : IpCategoryCount
         IPs flagged as bogon (private / reserved address space).
     vpn : IpCategoryCount
@@ -91,12 +82,8 @@ class IpStats(typing.TypedDict):
     """
 
     extracted_ip_count: int
-    classified_ip_count: int
-    percent_classified: float
     determined: IpCategoryCount
-    missing: IpCategoryCount
     unknown: IpCategoryCount
-    undetermined: IpCategoryCount
     bogon: IpCategoryCount
     vpn: IpCategoryCount
     cloud_service: IpCategoryCount
@@ -106,17 +93,15 @@ class IpStats(typing.TypedDict):
 def get_ip_stats(
     cache_directory: str | pathlib.Path | None = None,
     use_encryption: bool = True,
+    region_resolver: RegionResolver | None = None,
 ) -> IpStats:
-    """Return IP address stats comparing extraction cache against the classification cache.
+    """Return classification stats of the IP addresses in the extraction cache.
 
-    Counts unique IPs across all ``ips.txt`` files in the extraction cache and
-    compares that against the number of entries in ``ip_to_region.yaml``.  Also
-    bins every classified entry into one of these mutually-exclusive categories:
+    Collects the unique IPs across all ``ips.txt`` files in the extraction cache, resolves each of them the
+    same way the summaries do, and bins every one into one of these mutually-exclusive categories:
 
-    * **determined** – a real geographic region string (e.g. ``"US/California"``).
-    * **missing** – the cache entry is ``None`` (no region could be resolved).
-    * **unknown** – the lookup returned an unexpected error (``"unknown"``).
-    * **undetermined** – the lookup hit API quota limits (``"undetermined"``).
+    * **determined** – a geographic region (``"USA/CA"``) or country (``"USA"``).
+    * **unknown** – the IP is malformed, absent from the GeoLite2 database, or has no country there.
     * **bogon** – the IP is in private / reserved address space (``"bogon"``).
     * **vpn** – the IP matches a known VPN / datacenter CIDR (starts with ``"VPN"``).
     * **cloud_service** – the IP belongs to an AWS or GCP CIDR range.
@@ -127,21 +112,22 @@ def get_ip_stats(
     cache_directory : path-like or None, optional
         Root of the cache tree.  When ``None`` the configured default is used.
     use_encryption : bool, optional
-        If ``True`` (default), ``ips.txt`` and cache files are decrypted before
-        reading.  Pass ``False`` for plaintext files.
+        If ``True`` (default), ``ips.txt`` files are decrypted before reading.
+        Pass ``False`` for plaintext files.
+    region_resolver : RegionResolver, optional
+        Resolves each IP address to its region/service label. Defaults to an ``IpRegionResolver`` over the
+        GeoLite2 database in the cache directory.
 
     Returns
     -------
     IpStats
-        A typed dict with extraction vs. classification counts and per-category
-        breakdowns.
+        A typed dict with the extracted count and per-category breakdowns.
     """
     from ..config import get_cache_directory
 
     cache_path = pathlib.Path(cache_directory) if cache_directory is not None else get_cache_directory()
 
-    # Count unique IPs across all ips.txt files in the extraction subdirectory,
-    # matching the scope used by update_ip_to_region_codes.
+    # Count unique IPs across all ips.txt files in the extraction subdirectory, matching the scope of the summaries
     extraction_dir = cache_path / "extraction"
     extracted_ips: set[str] = set()
     if extraction_dir.exists():
@@ -149,23 +135,10 @@ def get_ip_stats(
             extracted_ips.update(_read_ips_from_file(file_path=ips_file, use_encryption=use_encryption))
     extracted_ip_count = len(extracted_ips)
 
-    # Load ip_to_region classification cache
-    ip_to_region: dict[str, str | None] = load_ip_cache(  # type: ignore[assignment]
-        cache_type="ip_to_region",
-        cache_directory=cache_directory,
-        use_encryption=use_encryption,
-    )
-    classified_ip_count = len(ip_to_region)
-    percent_classified = (classified_ip_count / extracted_ip_count * 100) if extracted_ip_count > 0 else 0.0
-
-    def _categorize(region: str | None) -> str:
+    def _categorize(region: str) -> str:
         match region:
-            case None:
-                return "missing"
             case "unknown":
                 return "unknown"
-            case "undetermined":
-                return "undetermined"
             case "bogon":
                 return "bogon"
             case _ if region.startswith("VPN"):
@@ -177,19 +150,24 @@ def get_ip_stats(
             case _:
                 return "determined"
 
-    counts = collections.Counter(_categorize(region) for region in ip_to_region.values())
+    counts: collections.Counter[str] = collections.Counter()
+    if extracted_ips:
+        owns_resolver = region_resolver is None
+        if owns_resolver:
+            region_resolver = IpRegionResolver(cache_directory=cache_directory)
+        try:
+            counts.update(_categorize(region_resolver.resolve(ip)) for ip in extracted_ips)
+        finally:
+            if owns_resolver:
+                region_resolver.close()
 
     def _pct(n: int) -> float:
-        return (n / classified_ip_count * 100) if classified_ip_count > 0 else 0.0
+        return (n / extracted_ip_count * 100) if extracted_ip_count > 0 else 0.0
 
     return IpStats(
         extracted_ip_count=extracted_ip_count,
-        classified_ip_count=classified_ip_count,
-        percent_classified=percent_classified,
         determined=IpCategoryCount(count=counts["determined"], percent=_pct(counts["determined"])),
-        missing=IpCategoryCount(count=counts["missing"], percent=_pct(counts["missing"])),
         unknown=IpCategoryCount(count=counts["unknown"], percent=_pct(counts["unknown"])),
-        undetermined=IpCategoryCount(count=counts["undetermined"], percent=_pct(counts["undetermined"])),
         bogon=IpCategoryCount(count=counts["bogon"], percent=_pct(counts["bogon"])),
         vpn=IpCategoryCount(count=counts["vpn"], percent=_pct(counts["vpn"])),
         cloud_service=IpCategoryCount(count=counts["cloud_service"], percent=_pct(counts["cloud_service"])),

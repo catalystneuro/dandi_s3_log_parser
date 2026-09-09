@@ -12,7 +12,7 @@ from ..extractors import (
     S3LogAccessExtractor,
     stop_extraction,
 )
-from ..ip_utils import refresh_ip_to_region_codes, update_ip_to_region_codes, update_region_code_coordinates
+from ..ip_utils import update_geolite2_database, update_region_code_coordinates
 from ..summarize import (
     generate_all_dataset_totals,
     generate_archive_summaries,
@@ -238,18 +238,8 @@ def _update_ip_cli() -> None:
     pass
 
 
-# s3logextraction update ip regions
-@_update_ip_cli.command(name="regions")
-@rich_click.option(
-    "--batch-limit",
-    help=(
-        "The maximum number of batches to process when updating IP region codes. "
-        "By default, all batches will be processed."
-    ),
-    required=False,
-    type=int,
-    default=None,
-)
+# s3logextraction update ip database
+@_update_ip_cli.command(name="database")
 @rich_click.option(
     "--cache",
     "cache_directory",
@@ -262,53 +252,23 @@ def _update_ip_cli() -> None:
     default=None,
 )
 @rich_click.option(
-    "--encryption",
-    "use_encryption",
-    help="Encrypt/decrypt IP addresses in cache files. Enabled by default.",
-    type=rich_click.BOOL,
-    default=True,
+    "--force",
+    help="Download a fresh copy even if the cached database is not yet stale.",
+    is_flag=True,
+    default=False,
 )
-def _update_ip_regions_cli(
-    batch_limit: int | None = None, cache_directory: str | None = None, use_encryption: bool = True
-) -> None:
-    update_ip_to_region_codes(
-        batch_limit=batch_limit,
-        cache_directory=pathlib.Path(cache_directory) if cache_directory is not None else None,
-        use_encryption=use_encryption,
-    )
-
-
-# s3logextraction update ip refresh
-@_update_ip_cli.command(name="refresh")
-@rich_click.option(
-    "--cache",
-    "cache_directory",
-    help=(
-        "Use a non-default cache directory for this command. "
-        "This overrides the configured cache directory without modifying saved config."
-    ),
-    required=False,
-    type=rich_click.Path(writable=True, file_okay=False, dir_okay=True),
-    default=None,
-)
-@rich_click.option(
-    "--encryption",
-    "use_encryption",
-    help="Encrypt/decrypt IP addresses in cache files. Enabled by default.",
-    type=rich_click.BOOL,
-    default=True,
-)
-def _refresh_ip_regions_cli(cache_directory: str | None = None, use_encryption: bool = True) -> None:
+def _update_ip_database_cli(cache_directory: str | None = None, force: bool = False) -> None:
     """
-    Refresh a subset of the ip_to_region cache by re-querying IPInfo and log any changes.
+    Download the MaxMind GeoLite2-City database used to geolocate IP addresses, if missing or stale.
 
-    Selects IPs deterministically based on today's date using a 90-day cycle over the
-    alphabetically sorted cache. Run once per day to refresh the entire cache every 90 days.
+    Requires the MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY environment variables of a (free) MaxMind account.
+    The `summaries` command runs this automatically, so it is only needed to force a refresh.
     """
-    refresh_ip_to_region_codes(
+    database_path = update_geolite2_database(
         cache_directory=pathlib.Path(cache_directory) if cache_directory is not None else None,
-        use_encryption=use_encryption,
+        force=force,
     )
+    print(f"GeoLite2 database is up to date at {database_path}")
 
 
 # s3logextraction update ip coordinates
@@ -327,11 +287,17 @@ def _refresh_ip_regions_cli(cache_directory: str | None = None, use_encryption: 
 @rich_click.option(
     "--encryption",
     "use_encryption",
-    help="Encrypt/decrypt IP addresses in cache files. Enabled by default.",
+    help="Encrypt/decrypt the coordinates cache file. Enabled by default.",
     type=rich_click.BOOL,
     default=True,
 )
 def _update_ip_coordinates_cli(cache_directory: str | None = None, use_encryption: bool = True) -> None:
+    """
+    Locate every region label of the published by-region summaries, writing `region_codes_to_coordinates.yaml`.
+
+    Run after `update summaries`. Geographic labels are looked up in the ISO 3166 tables bundled with the package;
+    cloud service regions are located with the GeoLite2 database.
+    """
     update_region_code_coordinates(
         cache_directory=pathlib.Path(cache_directory) if cache_directory is not None else None,
         use_encryption=use_encryption,
@@ -389,7 +355,7 @@ def _update_ip_coordinates_cli(cache_directory: str | None = None, use_encryptio
     help=(
         "The number of resolved regions an update to a 'by_region.tsv' must move at once for it to be published. "
         "Below this, the summary is left as it was, so that no single requester's activity can be read off "
-        "the change. A resolved region is any label naming a physical place, such as 'US/California'."
+        "the change. A resolved region is any label naming a physical place, such as 'USA/CA'."
     ),
     required=False,
     type=rich_click.IntRange(min=0),
@@ -410,7 +376,7 @@ def _update_ip_coordinates_cli(cache_directory: str | None = None, use_encryptio
 @rich_click.option(
     "--encryption",
     "use_encryption",
-    help="Encrypt/decrypt IP addresses in cache files. Enabled by default.",
+    help="Decrypt IP addresses in the extraction cache. Enabled by default.",
     type=rich_click.BOOL,
     default=True,
 )
@@ -424,7 +390,13 @@ def _update_summaries_cli(
     cache_directory: str | None = None,
     use_encryption: bool = True,
 ) -> None:
-    """Generate condensed summaries of activity."""
+    """
+    Generate condensed summaries of activity.
+
+    Requesters are geolocated while the summaries are generated, against the published IP ranges of known cloud
+    services and VPNs and the local GeoLite2 database. The database is downloaded on first use and refreshed once
+    a week old, which requires the MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY environment variables.
+    """
     cache_path = pathlib.Path(cache_directory) if cache_directory is not None else None
     match mode:
         case "archive":
@@ -554,7 +526,7 @@ def _validate_cli(
     "--cache",
     "cache_directory",
     help=(
-        "Optional cache directory containing IP-to-region lookup records. "
+        "Optional cache directory containing the extraction cache and the GeoLite2 database. "
         "If omitted, uses the configured default cache directory."
     ),
     required=False,
@@ -564,7 +536,7 @@ def _validate_cli(
 @rich_click.option(
     "--encryption",
     "use_encryption",
-    help="Decrypt IP addresses in cache files. Enabled by default; pass --encryption=false for plaintext caches.",
+    help="Decrypt IP addresses in the extraction cache. Enabled by default; pass --encryption=false for plaintext.",
     type=rich_click.BOOL,
     default=True,
 )
@@ -574,8 +546,9 @@ def _stats_cli(inventory_directory: str, cache_directory: str | None = None, use
 
     Reads a local pre-downloaded AWS S3 Inventory directory and prints the
     file count for all objects in the inventory, the extraction completion
-    percentage, and a breakdown of IP address classification categories
-    (determined, missing, unknown, bogon, VPN, cloud service, GitHub).
+    percentage, and a breakdown of how the extracted IP addresses classify
+    (determined, unknown, bogon, VPN, cloud service, GitHub), resolved the same
+    way the summaries resolve them.
     """
     inventory_path = pathlib.Path(inventory_directory)
     cache_path = pathlib.Path(cache_directory) if cache_directory is not None else None
@@ -594,14 +567,10 @@ def _stats_cli(inventory_directory: str, cache_directory: str | None = None, use
 
     rich_click.echo("")
     rich_click.echo(f"Extracted IPs   : {ip_stats['extracted_ip_count']}")
-    rich_click.echo(f"Classified IPs  : {ip_stats['classified_ip_count']}")
-    rich_click.echo(f"Percent classif.: {ip_stats['percent_classified']:.2f}%")
 
     rows: list[tuple[str, IpCategoryCount]] = [
         ("Determined", ip_stats["determined"]),
-        ("Missing", ip_stats["missing"]),
         ("Unknown", ip_stats["unknown"]),
-        ("Undetermined", ip_stats["undetermined"]),
         ("Bogon", ip_stats["bogon"]),
         ("VPN", ip_stats["vpn"]),
         ("Cloud service", ip_stats["cloud_service"]),

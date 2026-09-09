@@ -77,6 +77,7 @@ def test_cli_extraction_parallel(tmpdir: py.path.local) -> None:
     _run_cli_extraction_test(tmpdir, workers=2)
 
 
+@pytest.mark.usefixtures("use_mocked_region_resolver")
 def test_cli_generic_summaries(tmpdir: py.path.local) -> None:
     """Test summary generation using the CLI instead of the API."""
     test_dir = pathlib.Path(tmpdir)
@@ -89,9 +90,8 @@ def test_cli_generic_summaries(tmpdir: py.path.local) -> None:
     test_extraction_dir = test_dir / "extraction"
     test_summary_dir = test_dir / "summaries"
     shutil.copytree(src=expected_extraction_dir, dst=test_extraction_dir)
-    # Every requester of the example logs is a documentation-range address, which a real geolocation resolves
-    # to `bogon`; the mocked cache stands in for one so that the summaries have regions to report
-    shutil.copytree(src=base_tests_dir / "mocked_ips", dst=test_dir / "ips")
+    # Every requester of the example logs is a documentation-range address, which a real resolution labels
+    # `bogon`; the mocked resolver stands in for one so that the summaries have regions to report
 
     runner = CliRunner()
 
@@ -141,13 +141,13 @@ def test_cli_generic_summaries(tmpdir: py.path.local) -> None:
 
 
 @pytest.mark.ai_generated
+@pytest.mark.usefixtures("use_mocked_region_resolver")
 def test_cli_summaries_region_disclosure_threshold(tmpdir: py.path.local) -> None:
     """The disclosure threshold of the by-region summaries is settable from the command line."""
     test_dir = pathlib.Path(tmpdir)
 
     base_tests_dir = pathlib.Path(__file__).parent
     shutil.copytree(src=base_tests_dir / "expected_output" / "extraction", dst=test_dir / "extraction")
-    shutil.copytree(src=base_tests_dir / "mocked_ips", dst=test_dir / "ips")
 
     runner = CliRunner()
 

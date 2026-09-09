@@ -48,8 +48,8 @@ flowchart TD
     A[Configure cache<br/><br/>Initialize home and cache directories]
     B[Extract logs<br/><br/>Process raw S3 logs and store minimal extracted data]
     C[Update IP indexes<br/><br/>Generate anonymized indexes for each IP address]
-    D[Update region codes<br/><br/>Map IPs to ISO 3166 region codes using external API]
-    E[Update coordinates<br/><br/>Convert region codes to latitude/longitude for mapping]
+    D[Update region codes<br/><br/>Map IPs to ISO 3166 region codes using the local GeoLite2 database]
+    E[Update coordinates<br/><br/>Look up latitude/longitude for each region code in the bundled ISO 3166 tables]
     F[Generate summaries<br/><br/>Create per-dataset summaries for reporting]
     G[Generate totals<br/><br/>Aggregate statistics across datasets or archive]
     H[Share!<br/><br/>Post the summaries and totals in a public data repository]
@@ -93,31 +93,15 @@ s3logextraction stop
 
 This will allow it to finish processing the current batch of logs and then exit gracefully.
 
-After your logs are extracted, generate anonymized indexes for each IP address:
+After your logs are extracted, ensure the environment variables for the geolocation database are set:
+
+- **MAXMIND_ACCOUNT_ID** and **MAXMIND_LICENSE_KEY**
+  - Credentials of a free [MaxMind](https://www.maxmind.com/en/geolite2/signup) account, used to download the [GeoLite2-City](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) database.
+  - The database is downloaded into the cache directory on first use and refreshed automatically once it is more than a week old, so the credentials only need to be set on machines that generate the summaries.
 
 ```bash
-s3logextraction update ip indexes
-````
-
-Next, ensure some required environment variables related to external services are set:
-
-1. **IPINFO_API_KEY**
-   - Access token for the [ipinfo.io](https://ipinfo.io) service.
-   - Extracts geographic region information in ISO 3166 format (e.g. "US/California") for anonymized statistics.
-2. **OPENCAGE_API_KEY**
-   - Access token for the [opencagedata.com](https://opencagedata.com/) service.
-   - Maps the ISO 3166 codes from the first step to latitude and longitude coordinates for the geographic heat maps used in visualizations.
-
-```bash
-export IPINFO_API_KEY="your_token_here"
-export OPENCAGE_API_KEY="your_token_here"
-```
-
-To update the region codes and their coordinates:
-
-```bash
-s3logextraction update ip regions
-s3logextraction update ip coordinates
+export MAXMIND_ACCOUNT_ID="your_account_id_here"
+export MAXMIND_LICENSE_KEY="your_license_key_here"
 ```
 
 To generate top-level summaries and totals (that is, per dataset):
@@ -126,6 +110,24 @@ To generate top-level summaries and totals (that is, per dataset):
 s3logextraction update summaries
 s3logextraction update totals
 ```
+
+Requesters are geolocated while the summaries are generated. Each IP address is checked against the published ranges of GitHub, AWS, GCP, and known VPN or datacenter providers, and labeled by that service if it falls in one; otherwise it is looked up in the local GeoLite2 database and labeled with its ISO 3166-1 alpha-3 country code and ISO 3166-2 subdivision code (e.g. "USA/CA" for California). Fetching the published ranges needs network access. No requester's location is written to disk; only the aggregated `by_region.tsv` summaries are.
+
+To give every region of the published summaries a coordinate, for maps:
+
+```bash
+s3logextraction update ip coordinates
+```
+
+This step needs no credentials: each region code is looked up in ISO 3166 tables bundled with the package, whose coordinates come from the public-domain [Natural Earth](https://www.naturalearthdata.com) dataset. Cloud service regions such as `AWS/us-east-1` are located with the GeoLite2 database.
+
+To force a fresh download of the GeoLite2 database (this happens automatically when it is stale):
+
+```bash
+s3logextraction update ip database --force
+```
+
+This product includes GeoLite2 Data created by MaxMind, available from https://www.maxmind.com.
 
 Finally, to generate archive-wide summaries and totals:
 

@@ -12,7 +12,7 @@ packages = ["src/s3_log_extraction"]
 
 [project]
 name = "s3-log-extraction"
-version="1.10.14"
+version="1.11.3"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
@@ -54,8 +54,8 @@ classifiers = [
 
 [project.optional-dependencies]
 geolocation = [
-    "ipinfo",
-    "opencage",
+    "geoip2",
+    "requests",
 ]
 remote = [
     "fsspec",
@@ -139,6 +139,12 @@ known-first-party = ["s3_log_extraction"]
 "src/s3_log_extraction/_hidden_top_level_imports.py" = ["F401"]  # Must perform imports here even if not exposed
 
 
+[tool.codespell]
+skip = "*/ip_utils/_data/*"  # Three-letter ISO 3166 codes look like misspelled words
+# "sackin" is the proper name of the Sackin tree-imbalance index, not a typo.
+ignore-words-list = "sackin"
+
+
 [tool.pytest.ini_options]
 markers = [
     "remote: mark a test as requiring remote resources",
@@ -147,7 +153,3 @@ markers = [
 env = [
     "S3_LOG_EXTRACTION_PASSWORD=test",
 ]
-
-[tool.codespell]
-# "sackin" is the proper name of the Sackin tree-imbalance index, not a typo.
-ignore-words-list = "sackin"

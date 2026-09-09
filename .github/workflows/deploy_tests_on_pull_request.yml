@@ -22,6 +22,6 @@ jobs:
       uses: ./.github/workflows/remote_testing.yml
       secrets:
           S3_LOG_EXTRACTION_PASSWORD: ${{ secrets.S3_LOG_EXTRACTION_PASSWORD }}
-          IPINFO_API_KEY: ${{ secrets.IPINFO_API_KEY }}
-          OPENCAGE_API_KEY: ${{ secrets.OPENCAGE_API_KEY }}
+          MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
           CODECOV_CREDENTIALS: ${{ secrets.CODECOV_CREDENTIALS }}
