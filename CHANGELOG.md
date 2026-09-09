@@ -2,13 +2,6 @@
 
 ## Upcoming
 
-## v1.11.3
-
-### 🐛 Fixes
-
-- Bumped the `pypa/gh-action-pypi-publish` action from `v1.14.0` to `v1.14.2`. `v1.14.0` runs as a Docker container image with `packaging==25.0` baked in, which does not recognize the `Metadata-Version: 2.5` that current `hatchling` releases emit, causing PyPI uploads to fail with `InvalidDistribution: Invalid distribution metadata: '2.5' is not a valid metadata version`; `v1.14.2` bundles `packaging==26.2`, which supports it.
-- The Docker image release workflow no longer builds and pushes an image when the triggering PyPI publish workflow failed.
-
 ## v1.11.2
 
 ### ⚠️ Breaking
