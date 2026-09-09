@@ -238,7 +238,13 @@ def test_resolver_fetches_service_networks_on_first_use() -> None:
         assert resolver.resolve("203.0.113.7") == "AWS/us-east-1"
         assert resolver.resolve("203.0.113.8") == "AWS/us-east-1"
 
-    assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == ["AWS", "GCP", "GitHub", "VPN"]
+    assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == [
+        "AWS",
+        "GCP",
+        "GH-actions",
+        "GitHub",
+        "VPN",
+    ]
 
 
 @pytest.mark.ai_generated
