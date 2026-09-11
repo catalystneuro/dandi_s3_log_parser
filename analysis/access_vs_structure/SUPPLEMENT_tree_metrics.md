@@ -56,7 +56,7 @@ file size rather than an independent axis.
 |---|---|---|---|
 | **Mean / max leaf depth** | how deep the hierarchy is | yes | Mean depth = Sackin / $n$; the simplest size-normalized depth summary |
 | **Out-degree stats** (mean / max / variance of children per group) | fan-out / breadth | yes | The **NWB-native** shape axis the binary baseline throws away |
-| **Total cophenetic index** $\Phi$ (Mir, Rosselló & Rotger, 2013) | balance via $\sum_{\{i,j\}} \operatorname{depth}(\mathrm{LCA}(i,j))$ over leaf pairs | **yes** — defined for arbitrary trees; min = star, max = caterpillar | Better resolution than Sackin/Colless; a drop-in balance index without the binary assumption |
+| **Total cophenetic index** $\Phi$ (Mir, Rosselló & Rotger, 2013) | balance via $\sum_{\{i,j\}} \mathrm{depth}(\mathrm{LCA}(i,j))$ over leaf pairs | **yes** — defined for arbitrary trees; min = star, max = caterpillar | Better resolution than Sackin/Colless; a drop-in balance index without the binary assumption |
 | **Colless-like indices** (Mir, Rosselló & Rotger, 2018) | node-level imbalance generalized to multifurcating trees | yes | Parameterized by a node dissimilarity + weight; principled multifurcating Colless |
 | **Shao & Sokal $B_1$** (1990) | balance via $\sum_{\text{internal}} 1/(\text{subtree height})$ | yes | Simple, degree-agnostic |
 | **Shao & Sokal $B_2$ / tree entropy** (1990) | Shannon entropy of the leaf-reachability distribution under equiprobable descent | yes | Naturally rewards both depth and fan-out; scale-comparable; arguably the most information-theoretically honest single number |
