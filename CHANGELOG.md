@@ -2,6 +2,10 @@
 
 ## Upcoming
 
+### 🐛 Bug Fix
+
+- The IP ranges of GitHub are now recognized by their shape, as any entry of the published meta document that parses as an IPv4 network, instead of by skipping a fixed list of non-range keys. GitHub adds listings to the document over time, most recently its PGP public key blocks, and each of those entries was previously handed to the resolver as a CIDR and reported with a "Skipping invalid CIDR entry" warning on every run. ([#300](https://github.com/dandi/s3-log-extraction/pull/300))
+
 ## v1.11.2
 
 ### ⚠️ Breaking
