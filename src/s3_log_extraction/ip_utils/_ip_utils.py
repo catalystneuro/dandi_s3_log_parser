@@ -89,19 +89,30 @@ def _request_cidr_range(service_name: str) -> dict:
             raise ValueError(f"Service name '{service_name}' is not supported!")  # pragma: no cover
 
 
+def _is_ipv4_network(candidate: object, /) -> bool:
+    """Whether a value of GitHub's meta document is an IPv4 range rather than a key, a domain, or other metadata."""
+    if not isinstance(candidate, str):
+        return False
+    try:
+        return ipaddress.ip_network(address=candidate, strict=False).version == 4
+    except ValueError:
+        return False
+
+
 @functools.lru_cache
 def _get_cidr_address_ranges_and_subregions(*, service_name: str) -> list[tuple[str, str | None]]:
     cidr_request = _request_cidr_range(service_name=service_name)
     match service_name:
         case "GitHub":
-            skip_keys = ["domains", "ssh_key_fingerprints", "verifiable_password_authentication", "ssh_keys"]
-            keys = set(cidr_request.keys()) - set(skip_keys)
+            # The meta document lists the ranges of each GitHub product next to other metadata (domains, SSH keys,
+            # PGP keys, ...) under keys that GitHub adds to over time, so the ranges are recognized by their shape
+            # rather than by key: any string in a list that parses as an IPv4 network. IPv6 ranges are not handled.
             github_cidr_addresses_and_subregions = [
                 (cidr_address, None)
-                for key in keys
-                for cidr_address in cidr_request[key]
-                if "::" not in cidr_address
-                # Skip IPv6
+                for value in cidr_request.values()
+                if isinstance(value, list)
+                for cidr_address in value
+                if _is_ipv4_network(cidr_address)
             ]
 
             return github_cidr_addresses_and_subregions

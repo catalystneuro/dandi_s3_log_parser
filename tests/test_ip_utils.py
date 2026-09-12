@@ -4,6 +4,7 @@ import pathlib
 import pickle
 import tarfile
 import unittest.mock
+import warnings
 
 import geoip2.errors
 import pytest
@@ -239,6 +240,57 @@ def test_resolver_fetches_service_networks_on_first_use() -> None:
         assert resolver.resolve("203.0.113.8") == "AWS/us-east-1"
 
     assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == ["AWS", "GCP", "GitHub", "VPN"]
+
+
+@pytest.mark.ai_generated
+def test_github_ranges_are_recognized_by_shape_not_by_key() -> None:
+    """
+    Only the IPv4 ranges of GitHub's meta document are kept, whatever keys GitHub files them under.
+
+    The document also carries SSH keys, PGP key blocks, domains, and other metadata, under keys added over time, and
+    none of it may leak into the ranges or trigger the resolver's invalid-CIDR warning.
+    """
+    pgp_key_block = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nABC\n-----END PGP PUBLIC KEY BLOCK-----"
+    github_meta = {
+        "verifiable_password_authentication": False,
+        "ssh_key_fingerprints": {"SHA256_ED25519": "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"},
+        "ssh_keys": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"],
+        "some_future_key_listing": [pgp_key_block],
+        "hooks": ["192.0.2.0/24", "2001:db8::/32"],
+        "web": ["198.51.100.0/25"],
+        "actions": ["203.0.113.0/24"],
+        "domains": {"website": ["*.github.com"]},
+        "artifact_attestations": {"trust_domain": "", "services": ["*.example.com"]},
+    }
+    empty_listings = {"AWS": {"prefixes": []}, "GCP": {"prefixes": []}, "VPN": []}
+
+    ip_utils_module = s3_log_extraction.ip_utils._ip_utils
+    ip_utils_module._get_cidr_address_ranges_and_subregions.cache_clear()
+    try:
+        with (
+            unittest.mock.patch.object(
+                ip_utils_module,
+                "_request_cidr_range",
+                side_effect=lambda service_name: (
+                    github_meta if service_name == "GitHub" else empty_listings[service_name]
+                ),
+            ),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter("error")
+            service_networks = s3_log_extraction.ip_utils.fetch_service_networks()
+            resolver = IpRegionResolver(
+                service_networks=service_networks, geolite2_reader=_make_reader(city_responses={})
+            )
+
+            assert service_networks["GitHub"] == [
+                ("192.0.2.0/24", None),
+                ("198.51.100.0/25", None),
+                ("203.0.113.0/24", None),
+            ]
+            assert resolver.resolve("198.51.100.7") == "GitHub"
+    finally:
+        ip_utils_module._get_cidr_address_ranges_and_subregions.cache_clear()
 
 
 @pytest.mark.ai_generated
