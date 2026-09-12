@@ -256,6 +256,7 @@ def test_github_ranges_are_recognized_by_shape_not_by_key() -> None:
         "ssh_key_fingerprints": {"SHA256_ED25519": "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"},
         "ssh_keys": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"],
         "some_future_key_listing": [pgp_key_block],
+        "some_future_numeric_listing": [42, None],
         "hooks": ["192.0.2.0/24", "2001:db8::/32"],
         "web": ["198.51.100.0/25"],
         "actions": ["203.0.113.0/24"],
