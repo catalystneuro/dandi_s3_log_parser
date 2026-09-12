@@ -1,0 +1,71 @@
+# DANDI testing dandisets (asset-side ground truth for bot detection).
+#
+# One dandiset id per line; each is matched as "<id>/*" against the asset path
+# relative to the extraction/ root. Pass with:
+#     --testing-dataset-file testing_datasets.txt
+# to assess_bot_activity.py.
+#
+# These datasets are used by DANDI infrastructure/CI (mostly GitHub Actions), so
+# their traffic is expected to be dominated by automated monitoring rather than
+# human interest.
+
+001849
+000719
+001932
+001758
+001698
+000032
+001450
+000150
+000960
+001133
+001085
+001083
+001066
+001061
+001049
+001022
+000942
+000068
+000116
+000881
+000730
+000712
+000567
+000539
+000543
+000556
+000529
+000490
+000411
+000545
+000470
+000478
+000536
+000335
+000299
+000346
+000118
+000047
+000033
+000171
+000161
+000164
+000162
+000144
+000445
+000038
+000112
+000155
+000160
+000154
+000156
+000159
+000135
+000120
+000145
+000071
+000544
+000034
+000027
+000126

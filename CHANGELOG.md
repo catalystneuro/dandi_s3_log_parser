@@ -2,6 +2,10 @@
 
 ## Upcoming
 
+### 🚀 Enhancement
+
+- `number_of_views` now excludes GitHub Actions traffic, which is automated continuous integration rather than genuine interest. The published GitHub ranges are split into two service labels: `GH-actions` (the `actions*` keys of `api.github.com/meta`) and `GitHub` (everything else, such as Codespaces and the web/API). Only `GH-actions`-labeled requesters are dropped from view counts, so a human streaming a file from a notebook in a Codespace is still counted; a measurement over the full archive found roughly a quarter of raw views originate from cloud/VPN/CI ranges, with GitHub Actions the dominant contaminant. The unique-requester count is unchanged: it continues to exclude every cloud service and VPN range, `GH-actions` included. A new `is_github_actions_label` helper and a `region_resolver` argument to the internal view collector implement the exclusion.
+
 ### 🐛 Bug Fix
 
 - The IP ranges of GitHub are now recognized by their shape, as any entry of the published meta document that parses as an IPv4 network, instead of by skipping a fixed list of non-range keys. GitHub adds listings to the document over time, most recently its PGP public key blocks, and each of those entries was previously handed to the resolver as a CIDR and reported with a "Skipping invalid CIDR entry" warning on every run. ([#300](https://github.com/dandi/s3-log-extraction/pull/300))
@@ -45,6 +49,7 @@
 - Sessionized each asset once per dataset summary and shared the result across the by-asset, by-day, and by-region tables, so `ips.txt` is decrypted no more often than before. ([#293](https://github.com/dandi/s3-log-extraction/pull/293))
 
 - Added a `Version Check` CI workflow that fails pull requests which modify `src/` or `pyproject.toml` without bumping the package version. ([#292](https://github.com/dandi/s3-log-extraction/pull/292))
+- Added exploratory analysis scripts under `analysis/` for assessing streaming "view session" separability and relating NWB structural metrics and asset size to web access counts. ([#284](https://github.com/dandi/s3-log-extraction/pull/284))
 
 ### 🐛 Bug Fix
 

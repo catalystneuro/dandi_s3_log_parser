@@ -60,7 +60,7 @@ def _request_cidr_range(service_name: str) -> dict:
     import requests
 
     match service_name:
-        case "GitHub":
+        case "GitHub" | "GH-actions":
             github_cidr_request = requests.get(url="https://api.github.com/meta").json()
 
             return github_cidr_request
@@ -103,14 +103,28 @@ def _is_ipv4_network(candidate: object, /) -> bool:
 def _get_cidr_address_ranges_and_subregions(*, service_name: str) -> list[tuple[str, str | None]]:
     cidr_request = _request_cidr_range(service_name=service_name)
     match service_name:
+        case "GH-actions":
+            # GitHub Actions runner ranges only (the actions* keys), split out of the broader "GitHub"
+            # service so that unambiguous CI traffic can be excluded from view counts on its own narrow
+            # label. Ranges are recognized by their shape, matching the "GitHub" case below.
+            github_actions_cidr_addresses_and_subregions = [
+                (cidr_address, None)
+                for key, value in cidr_request.items()
+                if isinstance(value, list) and key.startswith("actions")
+                for cidr_address in value
+                if _is_ipv4_network(cidr_address)
+            ]
+
+            return github_actions_cidr_addresses_and_subregions
         case "GitHub":
             # The meta document lists the ranges of each GitHub product next to other metadata (domains, SSH keys,
             # PGP keys, ...) under keys that GitHub adds to over time, so the ranges are recognized by their shape
             # rather than by key: any string in a list that parses as an IPv4 network. IPv6 ranges are not handled.
+            # The Actions runner ranges are handled by the "GH-actions" service, so their keys are skipped here.
             github_cidr_addresses_and_subregions = [
                 (cidr_address, None)
-                for value in cidr_request.values()
-                if isinstance(value, list)
+                for key, value in cidr_request.items()
+                if isinstance(value, list) and not key.startswith("actions")
                 for cidr_address in value
                 if _is_ipv4_network(cidr_address)
             ]

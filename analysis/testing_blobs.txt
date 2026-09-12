@@ -1,0 +1,21 @@
+# Asset/blob exclusion list for assess_streaming_sessions.py
+#
+# One glob pattern per line, matched (fnmatch) against the asset path relative
+# to the extraction/ root, e.g. "ds000123/sub-01/file.nwb" or "blobs/2db/af0/<uuid>".
+# Lines starting with '#' and blank lines are ignored.
+#
+# Pass with:  --exclude-asset-file analysis/testing_blobs.txt
+#
+# These blobs were identified as bot/monitoring traffic (machine-polled at regular
+# intervals, near-100% same-asset gaps) dominating the session guard bands. Re-run
+# the script after each addition and watch the guard-band counts drop; add any new
+# top same-asset contributors that surface.
+
+blobs/2db/af0/2dbaf0fd-5003-4a0a-b4c0-bc8cdbdb3826
+blobs/fa9/334/fa9334d7-3a3a-4a34-8de4-cc76b42108ad
+blobs/11e/c89/11ec8933-1456-4942-922b-94e5878bb991
+blobs/43b/f3a/43bf3a81-4a0b-433f-b471-1f10303f9d35
+blobs/a2b/94f/a2b94f91-6a75-43d8-b5db-21d89449f481
+blobs/30c/6cc/30c6cc7b-4d17-4237-9786-66623a6c65eb
+blobs/fec/8a6/fec8a690-2ece-4437-8877-8a002ff8bd8a
+blobs/bb8/1f7/bb81f7b3-4cfa-40e7-aa89-95beb1954d8c

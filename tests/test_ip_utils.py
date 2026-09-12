@@ -239,7 +239,13 @@ def test_resolver_fetches_service_networks_on_first_use() -> None:
         assert resolver.resolve("203.0.113.7") == "AWS/us-east-1"
         assert resolver.resolve("203.0.113.8") == "AWS/us-east-1"
 
-    assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == ["AWS", "GCP", "GitHub", "VPN"]
+    assert sorted(call.kwargs["service_name"] for call in mock_ranges.call_args_list) == [
+        "AWS",
+        "GCP",
+        "GH-actions",
+        "GitHub",
+        "VPN",
+    ]
 
 
 @pytest.mark.ai_generated
@@ -273,7 +279,7 @@ def test_github_ranges_are_recognized_by_shape_not_by_key() -> None:
                 ip_utils_module,
                 "_request_cidr_range",
                 side_effect=lambda service_name: (
-                    github_meta if service_name == "GitHub" else empty_listings[service_name]
+                    github_meta if service_name in ("GitHub", "GH-actions") else empty_listings[service_name]
                 ),
             ),
             warnings.catch_warnings(),
@@ -284,12 +290,14 @@ def test_github_ranges_are_recognized_by_shape_not_by_key() -> None:
                 service_networks=service_networks, geolite2_reader=_make_reader(city_responses={})
             )
 
+            # The actions* ranges are split into the "GH-actions" service; the rest are "GitHub".
             assert service_networks["GitHub"] == [
                 ("192.0.2.0/24", None),
                 ("198.51.100.0/25", None),
-                ("203.0.113.0/24", None),
             ]
+            assert service_networks["GH-actions"] == [("203.0.113.0/24", None)]
             assert resolver.resolve("198.51.100.7") == "GitHub"
+            assert resolver.resolve("203.0.113.7") == "GH-actions"
     finally:
         ip_utils_module._get_cidr_address_ranges_and_subregions.cache_clear()
 

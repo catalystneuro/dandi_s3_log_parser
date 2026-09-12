@@ -96,7 +96,7 @@ def test_resolver_resolves_public_ip_remote(tmp_path: pathlib.Path) -> None:
         with s3_log_extraction.ip_utils.IpRegionResolver(cache_directory=tmp_path) as resolver:
             region = resolver.resolve(test_ip)
             # The live listings must have been fetched for every known service
-            assert set(resolver.service_networks.keys()) == {"GitHub", "AWS", "GCP", "VPN"}
+            assert set(resolver.service_networks.keys()) == {"GH-actions", "GitHub", "AWS", "GCP", "VPN"}
             assert all(len(networks) > 0 for networks in resolver.service_networks.values())
     except Exception as exc:
         _fail_if_maxmind_rejected(exc)

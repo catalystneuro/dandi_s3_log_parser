@@ -12,7 +12,7 @@ packages = ["src/s3_log_extraction"]
 
 [project]
 name = "s3-log-extraction"
-version="1.11.3"
+version="1.11.4"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
@@ -141,6 +141,8 @@ known-first-party = ["s3_log_extraction"]
 
 [tool.codespell]
 skip = "*/ip_utils/_data/*"  # Three-letter ISO 3166 codes look like misspelled words
+# "sackin" is the proper name of the Sackin tree-imbalance index, not a typo.
+ignore-words-list = "sackin"
 
 
 [tool.pytest.ini_options]
