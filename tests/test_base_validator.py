@@ -51,9 +51,7 @@ def test_validate_file_writes_record(isolated_records_directory: pathlib.Path, t
 
 
 @pytest.mark.ai_generated
-def test_validate_file_skips_already_recorded(
-    isolated_records_directory: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
+def test_validate_file_skips_already_recorded(isolated_records_directory: pathlib.Path, tmp_path: pathlib.Path) -> None:
     """A file already present in the record should not be validated a second time."""
     log_file = tmp_path / "example.log"
     log_file.write_text("content\n")
@@ -67,9 +65,7 @@ def test_validate_file_skips_already_recorded(
 
 
 @pytest.mark.ai_generated
-def test_record_is_reloaded_by_a_new_instance(
-    isolated_records_directory: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
+def test_record_is_reloaded_by_a_new_instance(isolated_records_directory: pathlib.Path, tmp_path: pathlib.Path) -> None:
     """A fresh instance should read back the record written by a previous one and skip those files."""
     log_file = tmp_path / "example.log"
     log_file.write_text("content\n")

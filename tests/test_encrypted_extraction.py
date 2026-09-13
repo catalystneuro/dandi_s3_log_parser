@@ -79,9 +79,7 @@ def test_encrypted_extraction_accumulates_across_calls(tmp_path: pathlib.Path) -
     single_pass_cache_directory.mkdir()
 
     for _ in range(2):
-        incremental_extractor = S3LogAccessExtractor(
-            cache_directory=incremental_cache_directory, use_encryption=True
-        )
+        incremental_extractor = S3LogAccessExtractor(cache_directory=incremental_cache_directory, use_encryption=True)
         incremental_extractor.extract_directory(directory=log_directory, limit=1, workers=1)
 
     single_pass_extractor = S3LogAccessExtractor(cache_directory=single_pass_cache_directory, use_encryption=True)
@@ -101,8 +99,8 @@ def test_ip_stats_over_encrypted_extraction(
     extractor = S3LogAccessExtractor(cache_directory=tmp_path, use_encryption=True)
     extractor.extract_directory(directory=_EXAMPLE_LOGS_DIRECTORY, limit=1, workers=1)
 
-    ip_stats = get_ip_stats(
-        cache_directory=tmp_path, use_encryption=True, region_resolver=mocked_region_resolver
-    )
+    ip_stats = get_ip_stats(cache_directory=tmp_path, use_encryption=True, region_resolver=mocked_region_resolver)
 
-    assert ip_stats["extracted_ip_count"] == len(set(_read_extracted_ips(extractor.extraction_directory, use_encryption=True)))
+    assert ip_stats["extracted_ip_count"] == len(
+        set(_read_extracted_ips(extractor.extraction_directory, use_encryption=True))
+    )

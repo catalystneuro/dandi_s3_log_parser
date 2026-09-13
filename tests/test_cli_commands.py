@@ -96,9 +96,7 @@ def test_cli_reset_extraction(runner: CliRunner, tmp_path: pathlib.Path) -> None
     (records_directory / "S3LogAccessExtractor_file-processing-end.txt").write_text("log_a\n")
     (records_directory / "DownloadsLogicPreValidator_abc123.txt").write_text("log_a\n")
 
-    result = runner.invoke(
-        s3_log_extraction.s3logextraction_cli, ["reset", "extraction", "--cache", str(tmp_path)]
-    )
+    result = runner.invoke(s3_log_extraction.s3logextraction_cli, ["reset", "extraction", "--cache", str(tmp_path)])
 
     assert result.exit_code == 0, result.output
     assert list(extraction_directory.rglob(pattern="*")) == []
@@ -126,9 +124,7 @@ def test_cli_config_cache_set(runner: CliRunner, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("s3_log_extraction.config._config.S3_LOG_EXTRACTION_CONFIG_FILE_PATH", config_file_path)
     new_cache_directory = tmp_path / "new_cache"
 
-    result = runner.invoke(
-        s3_log_extraction.s3logextraction_cli, ["config", "cache", "set", str(new_cache_directory)]
-    )
+    result = runner.invoke(s3_log_extraction.s3logextraction_cli, ["config", "cache", "set", str(new_cache_directory)])
 
     assert result.exit_code == 0, result.output
     assert s3_log_extraction.config.get_config() == {"cache_directory": str(new_cache_directory)}
