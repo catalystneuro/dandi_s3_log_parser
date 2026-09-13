@@ -6,6 +6,10 @@
 
 - The IP ranges of GitHub are now recognized by their shape, as any entry of the published meta document that parses as an IPv4 network, instead of by skipping a fixed list of non-range keys. GitHub adds listings to the document over time, most recently its PGP public key blocks, and each of those entries was previously handed to the resolver as a CIDR and reported with a "Skipping invalid CIDR entry" warning on every run. ([#300](https://github.com/dandi/s3-log-extraction/pull/300))
 
+### 🏠 Internal
+
+- Expanded the test suite over modules that previously had no tests, raising reported coverage from 79.8% to 91.1%. New tests cover the `HttpEmptySplit`, `HttpSplitCount`, and `TimestampsParsing` pre-validators, the record keeping and directory traversal shared through `BaseValidator`, the record keeping and stop handling of `S3LogAccessExtractor`, extraction with IP encryption enabled, `stop_extraction`, `reset_extraction`, `generate_benchmark`, `fetch_service_networks`, the testing assertion helpers, and the `validate`, `reset`, `stop`, and `config cache set` commands. Validator record caches are now redirected to a temporary directory during tests, so the suite no longer writes into the user's real cache directory. ([#301](https://github.com/dandi/s3-log-extraction/pull/301))
+
 ## v1.11.2
 
 ### ⚠️ Breaking
