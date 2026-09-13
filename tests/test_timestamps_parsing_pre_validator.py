@@ -84,7 +84,7 @@ def test_timestamps_parsing_skips_non_success_status(tmp_path: pathlib.Path, sta
     ],
 )
 def test_timestamps_parsing_aberrant(tmp_path: pathlib.Path, datetime: str) -> None:
-    """Validator should raise RuntimeError when a 2xx GET line has an unparseable timestamp."""
+    """Validator should raise RuntimeError when a 2xx GET line has an unparsable timestamp."""
     log_file = tmp_path / "aberrant.log"
     log_file.write_text(_make_log_line(datetime=datetime))
 
